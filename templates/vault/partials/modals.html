@@ -943,3 +943,116 @@
         </div>
     </div>
 </div>
+
+<!-- Cloud Admins Modal -->
+<div id="cloudAdminsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0.9); z-index: 9999; backdrop-filter: blur(8px); overflow-y: auto;">
+    <div style="display: flex; align-items: flex-start; justify-content: center; min-height: 100vh; padding: var(--space-lg);">
+        <div class="card" style="width: 100%; max-width: 1200px; margin: var(--space-lg) 0; max-height: calc(100vh - 4rem); overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white);">
+                    <i class="ph ph-user-gear" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Cloud Admins
+                </h3>
+                <button type="button" onclick="closeCloudAdminsModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 24px; cursor: pointer; padding: var(--space-xs);">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
+                <!-- Entra Admins Card -->
+                <div class="card" style="background: var(--glass-surface); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--electric-blue), var(--blue-highlight)); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-microsoft-logo" style="color: var(--pure-white); font-size: 24px;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--pure-white);" id="entraAdminsCount">0</div>
+                            <div style="font-size: 14px; color: var(--slate-muted);">Entra Admins</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Proxmox Admins Card -->
+                <div class="card" style="background: var(--glass-surface); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--amber-yellow), #f59e0b); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-server" style="color: var(--pure-white); font-size: 24px;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--pure-white);" id="proxmoxAdminsCount">0</div>
+                            <div style="font-size: 14px; color: var(--slate-muted);">Proxmox Admins</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Total Admins Card -->
+                <div class="card" style="background: var(--glass-surface); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--emerald-green), #10b981); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-users-three" style="color: var(--pure-white); font-size: 24px;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--pure-white);" id="totalAdminsCount">0</div>
+                            <div style="font-size: 14px; color: var(--slate-muted);">Total Admins</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Active This Month Card -->
+                <div class="card" style="background: var(--glass-surface); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--purple-accent), #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-activity" style="color: var(--pure-white); font-size: 24px;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 24px; font-weight: 700; color: var(--pure-white);" id="activeAdminsCount">0</div>
+                            <div style="font-size: 14px; color: var(--slate-muted);">Active This Month</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filter and Search -->
+            <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-lg); align-items: center; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">
+                        <i class="ph ph-magnifying-glass"></i>
+                        Search Admin Accounts
+                    </label>
+                    <input type="text" id="cloudAdminsSearchInput" class="form-input" placeholder="Search by name, email, or UPN..." onkeyup="filterCloudAdmins()">
+                </div>
+                <div style="min-width: 200px;">
+                    <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">
+                        <i class="ph ph-funnel"></i>
+                        Filter by Platform
+                    </label>
+                    <select id="cloudAdminsFilterPlatform" class="form-input" onchange="filterCloudAdmins()">
+                        <option value="all">All Platforms</option>
+                        <option value="entra">Entra ID</option>
+                        <option value="proxmox">Proxmox</option>
+                    </select>
+                </div>
+                <div style="min-width: 200px;">
+                    <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">
+                        <i class="ph ph-circle"></i>
+                        Filter by Status
+                    </label>
+                    <select id="cloudAdminsFilterStatus" class="form-input" onchange="filterCloudAdmins()">
+                        <option value="all">All Status</option>
+                        <option value="enabled">Enabled</option>
+                        <option value="disabled">Disabled</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Admin Accounts List -->
+            <div id="cloudAdminsList" style="min-height: 200px;">
+                <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                    <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite; margin-bottom: var(--space-sm);"></i>
+                    <div>Loading admin accounts...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

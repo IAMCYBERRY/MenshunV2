@@ -2097,7 +2097,8 @@
         openAuditLogsModal: typeof window.openAuditLogsModal,
         openCredentialTypesModal: typeof window.openCredentialTypesModal,
         openIntegrationsModal: typeof window.openIntegrationsModal,
-        openAddEntryModal: typeof window.openAddEntryModal
+        openAddEntryModal: typeof window.openAddEntryModal,
+        openCloudAdminsModal: typeof window.openCloudAdminsModal
     });
     
     // Simple test function
@@ -3524,6 +3525,394 @@
     function openSystemSettings() {
         showNotification('System settings feature coming soon!', 'info');
     }
+    
+    // ==================================================
+    // Cloud Admins Modal Functions
+    // ==================================================
+    
+    let cloudAdminsList = [];
+    let filteredCloudAdminsList = [];
+    
+    function openCloudAdminsModal() {
+        // Create fresh modal element
+        const freshModal = document.createElement('div');
+        freshModal.id = 'freshCloudAdminsModal';
+        freshModal.style.cssText = `
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: rgba(0, 0, 0, 0.8); 
+            z-index: 999999; 
+            display: flex; 
+            align-items: flex-start; 
+            justify-content: center; 
+            padding: 32px;
+            overflow-y: auto;
+            backdrop-filter: blur(8px);
+        `;
+        
+        freshModal.innerHTML = '<div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 12px; padding: 32px; backdrop-filter: blur(8px); width: 100%; max-width: 1200px; margin: 32px 0; max-height: calc(100vh - 4rem); overflow-y: auto;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">' +
+                '<h3 style="font-size: 24px; font-weight: 800; color: white;">' +
+                    '<i class="ph ph-user-gear" style="color: #0ea5e9; margin-right: 8px;"></i>' +
+                    'Cloud Admins' +
+                '</h3>' +
+                '<button type="button" onclick="closeFreshCloudAdminsModal()" style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; padding: 8px;">' +
+                    '<i class="ph ph-x"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div style="text-align: center; color: #94a3b8; padding: 32px;">' +
+                '<i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite; margin-bottom: 16px;"></i>' +
+                '<div>Loading Cloud Admins...</div>' +
+            '</div>' +
+        '</div>';
+        
+        document.body.appendChild(freshModal);
+        document.body.style.overflow = 'hidden';
+        
+        // Add close function to window
+        window.closeFreshCloudAdminsModal = function() {
+            freshModal.remove();
+            document.body.style.overflow = 'auto';
+        };
+        
+        // Load the actual data
+        loadFreshCloudAdmins(freshModal);
+    }
+    
+    // Fresh Cloud Admins functions
+    function loadFreshCloudAdmins(modalElement) {
+        console.log('Loading Cloud Admins data...');
+        
+        fetch('/ajax/cloud-admins/')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Cloud Admins data loaded:', data);
+                console.log('Stats:', data.stats);
+                console.log('Accounts found:', data.accounts);
+                console.log('Account details:', JSON.stringify(data.accounts, null, 2));
+                displayFreshCloudAdmins(modalElement, data);
+            })
+            .catch(error => {
+                console.error('Error loading Cloud Admins:', error);
+                const loadingDiv = modalElement.querySelector('div[style*="text-align: center"]');
+                if (loadingDiv) {
+                    loadingDiv.innerHTML = '<div style="color: #ef4444;">Failed to load Cloud Admins data</div>';
+                }
+            });
+    }
+    
+    function displayFreshCloudAdmins(modalElement, data) {
+        const modalCard = modalElement.querySelector('div[style*="background: rgba(30, 41, 59, 0.6)"]');
+        if (!modalCard) return;
+        
+        const stats = data.stats || {};
+        const accounts = data.accounts || [];
+        
+        modalCard.innerHTML = 
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">' +
+                '<h3 style="font-size: 24px; font-weight: 800; color: white;">' +
+                    '<i class="ph ph-user-gear" style="color: #0ea5e9; margin-right: 8px;"></i>' +
+                    'Cloud Admins' +
+                '</h3>' +
+                '<button type="button" onclick="closeFreshCloudAdminsModal()" style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; padding: 8px;">' +
+                    '<i class="ph ph-x"></i>' +
+                '</button>' +
+            '</div>' +
+            
+            // Summary Cards
+            '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">' +
+                '<div style="background: rgba(51, 65, 85, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px; text-align: center;">' +
+                    '<div style="font-size: 24px; font-weight: 700; color: #0ea5e9;">' + (stats.entra_admins || 0) + '</div>' +
+                    '<div style="font-size: 14px; color: #94a3b8;">Entra Admins</div>' +
+                '</div>' +
+                '<div style="background: rgba(51, 65, 85, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px; text-align: center;">' +
+                    '<div style="font-size: 24px; font-weight: 700; color: #10b981;">' + (stats.proxmox_admins || 0) + '</div>' +
+                    '<div style="font-size: 14px; color: #94a3b8;">Proxmox Admins</div>' +
+                '</div>' +
+                '<div style="background: rgba(51, 65, 85, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px; text-align: center;">' +
+                    '<div style="font-size: 24px; font-weight: 700; color: white;">' + (stats.total_admins || 0) + '</div>' +
+                    '<div style="font-size: 14px; color: #94a3b8;">Total Admins</div>' +
+                '</div>' +
+                '<div style="background: rgba(51, 65, 85, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px; text-align: center;">' +
+                    '<div style="font-size: 24px; font-weight: 700; color: #7c3aed;">' + (stats.active_this_month || 0) + '</div>' +
+                    '<div style="font-size: 14px; color: #94a3b8;">Active This Month</div>' +
+                '</div>' +
+            '</div>' +
+            
+            // Admin List
+            '<div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">' +
+                '<h4 style="color: white; font-size: 18px; font-weight: 600; margin: 0;">Admin Accounts (' + accounts.length + ')</h4>' +
+                '<button onclick="createTestAdminLogs()" style="padding: 8px 16px; background: #0ea5e9; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 14px;">' +
+                    '<i class="ph ph-plus" style="margin-right: 4px;"></i>Create Test Data' +
+                '</button>' +
+            '</div>' +
+            '<div style="max-height: 400px; overflow-y: auto;">' +
+                (accounts.length > 0 ? 
+                    accounts.map(account => 
+                        '<div style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 8px;">' +
+                            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                                '<div>' +
+                                    '<div style="color: white; font-weight: 600;">' + (account.username || account.account_name || 'Unknown') + '</div>' +
+                                    '<div style="color: #94a3b8; font-size: 14px;">' + (account.platform || 'Unknown') + ' • Created ' + (account.created_date || 'Unknown') + '</div>' +
+                                '</div>' +
+                                '<div style="padding: 4px 8px; border-radius: 4px; font-size: 12px; ' + 
+                                    (account.status === 'enabled' ? 'background: rgba(16, 185, 129, 0.2); color: #10b981;' : 'background: rgba(239, 68, 68, 0.2); color: #ef4444;') + '">' +
+                                    (account.status || 'unknown') +
+                                '</div>' +
+                            '</div>' +
+                        '</div>'
+                    ).join('') 
+                    : 
+                    '<div style="text-align: center; color: #94a3b8; padding: 32px;">' +
+                        '<i class="ph ph-users" style="font-size: 48px; margin-bottom: 16px; display: block;"></i>' +
+                        '<div>No admin accounts found</div>' +
+                        '<div style="font-size: 14px; margin-top: 8px;">Admin accounts created through this system will appear here</div>' +
+                    '</div>'
+                ) +
+            '</div>';
+    }
+    
+    // Helper function to get CSRF cookie
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function createTestAdminLogs() {
+        console.log('Creating test admin logs...');
+        
+        fetch('/ajax/create-test-admin-logs/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Test admin logs created:', data);
+                showNotification(`Created ${data.created_count} test admin accounts`, 'success');
+                
+                // Reload the modal data
+                const freshModal = document.getElementById('freshCloudAdminsModal');
+                if (freshModal) {
+                    loadFreshCloudAdmins(freshModal);
+                }
+            } else {
+                console.error('Failed to create test data:', data.error);
+                showNotification('Failed to create test data: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error creating test data:', error);
+            showNotification('Error creating test data', 'error');
+        });
+    }
+    
+    function closeCloudAdminsModal() {
+        const modal = document.getElementById('cloudAdminsModal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+    }
+    
+    function loadCloudAdmins() {
+        // Load admin accounts from API
+        fetch('/ajax/cloud-admins/', {
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCSRFToken() }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                cloudAdminsList = data.admins || [];
+                filteredCloudAdminsList = [...cloudAdminsList];
+                updateCloudAdminsStats();
+                displayCloudAdmins(filteredCloudAdminsList);
+            } else {
+                showNotification(data.error || 'Failed to load admin accounts', 'error');
+                document.getElementById('cloudAdminsList').innerHTML = `
+                    <div class="alert alert-danger" style="text-align: center;">
+                        <i class="ph ph-warning-circle"></i>
+                        Failed to load admin accounts
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading cloud admins:', error);
+            showNotification('Failed to load admin accounts', 'error');
+            document.getElementById('cloudAdminsList').innerHTML = `
+                <div class="alert alert-danger" style="text-align: center;">
+                    <i class="ph ph-warning-circle"></i>
+                    Error loading admin accounts
+                </div>
+            `;
+        });
+    }
+    
+    function updateCloudAdminsStats() {
+        const entraAdmins = cloudAdminsList.filter(admin => admin.platform === 'entra').length;
+        const proxmoxAdmins = cloudAdminsList.filter(admin => admin.platform === 'proxmox').length;
+        const totalAdmins = cloudAdminsList.length;
+        
+        // Calculate active this month (placeholder logic - would need last_login data)
+        const activeAdmins = cloudAdminsList.filter(admin => admin.enabled).length;
+        
+        // Only update elements if they exist
+        const entraCount = document.getElementById('entraAdminsCount');
+        if (entraCount) entraCount.textContent = entraAdmins;
+        
+        const proxmoxCount = document.getElementById('proxmoxAdminsCount');
+        if (proxmoxCount) proxmoxCount.textContent = proxmoxAdmins;
+        
+        const totalCount = document.getElementById('totalAdminsCount');
+        if (totalCount) totalCount.textContent = totalAdmins;
+        
+        const activeCount = document.getElementById('activeAdminsCount');
+        if (activeCount) activeCount.textContent = activeAdmins;
+    }
+    
+    function filterCloudAdmins() {
+        const searchTerm = document.getElementById('cloudAdminsSearchInput').value.toLowerCase();
+        const platformFilter = document.getElementById('cloudAdminsFilterPlatform').value;
+        const statusFilter = document.getElementById('cloudAdminsFilterStatus').value;
+        
+        filteredCloudAdminsList = cloudAdminsList.filter(admin => {
+            const matchesSearch = !searchTerm || 
+                admin.display_name.toLowerCase().includes(searchTerm) ||
+                admin.user_principal_name.toLowerCase().includes(searchTerm) ||
+                (admin.mail && admin.mail.toLowerCase().includes(searchTerm));
+            
+            const matchesPlatform = platformFilter === 'all' || admin.platform === platformFilter;
+            
+            const matchesStatus = statusFilter === 'all' || 
+                (statusFilter === 'enabled' && admin.enabled) ||
+                (statusFilter === 'disabled' && !admin.enabled);
+            
+            return matchesSearch && matchesPlatform && matchesStatus;
+        });
+        
+        displayCloudAdmins(filteredCloudAdminsList);
+    }
+    
+    function displayCloudAdmins(admins) {
+        const container = document.getElementById('cloudAdminsList');
+        
+        // If container doesn't exist (simplified modal), just log the results
+        if (!container) {
+            console.log('Cloud Admins loaded:', admins.length, 'accounts found');
+            return;
+        }
+        
+        if (admins.length === 0) {
+            container.innerHTML = `
+                <div class="alert alert-info" style="text-align: center;">
+                    <i class="ph ph-user-x"></i>
+                    No admin accounts found matching the current filters
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-md);">';
+        
+        admins.forEach(admin => {
+            const platformIcon = admin.platform === 'entra' ? 'ph-microsoft-logo' : 'ph-server';
+            const platformColor = admin.platform === 'entra' ? 'var(--electric-blue)' : 'var(--amber-yellow)';
+            const statusIcon = admin.enabled ? 'ph-check-circle' : 'ph-x-circle';
+            const statusColor = admin.enabled ? 'var(--emerald-green)' : 'var(--crimson-red)';
+            const statusText = admin.enabled ? 'Enabled' : 'Disabled';
+            
+            const createdDate = admin.created_at ? new Date(admin.created_at).toLocaleDateString() : 'N/A';
+            const lastActivity = admin.last_activity ? new Date(admin.last_activity).toLocaleDateString() : 'Never';
+            
+            html += `
+                <div class="card" style="background: var(--glass-surface); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                                <div style="width: 40px; height: 40px; background: ${platformColor}20; border: 1px solid ${platformColor}40; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <i class="ph ${platformIcon}" style="color: ${platformColor}; font-size: 20px;"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--pure-white); font-size: 16px;">${admin.display_name}</div>
+                                    <div style="font-size: 14px; color: var(--electric-blue);">${admin.user_principal_name}</div>
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-sm);">
+                                <div>
+                                    <div style="font-size: 12px; color: var(--slate-muted);">Platform</div>
+                                    <div style="font-size: 14px; color: var(--pure-white); text-transform: capitalize;">${admin.platform}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--slate-muted);">Status</div>
+                                    <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                                        <i class="ph ${statusIcon}" style="color: ${statusColor};"></i>
+                                        <span style="font-size: 14px; color: ${statusColor};">${statusText}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--slate-muted);">Created</div>
+                                    <div style="font-size: 14px; color: var(--pure-white);">${createdDate}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--slate-muted);">Last Activity</div>
+                                    <div style="font-size: 14px; color: var(--pure-white);">${lastActivity}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <button type="button" class="btn-icon" onclick="viewAdminDetails('${admin.id}')" title="View Details">
+                                <i class="ph ph-eye"></i>
+                            </button>
+                            <button type="button" class="btn-icon" onclick="manageAdminAccount('${admin.id}')" title="Manage Account">
+                                <i class="ph ph-gear"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+    
+    function viewAdminDetails(adminId) {
+        // Placeholder for admin details view
+        showNotification('Admin details view coming soon!', 'info');
+    }
+    
+    function manageAdminAccount(adminId) {
+        // Placeholder for admin account management
+        showNotification('Admin account management coming soon!', 'info');
+    }
+    
+    // Make Cloud Admins functions globally available
+    window.openCloudAdminsModal = openCloudAdminsModal;
+    window.closeCloudAdminsModal = closeCloudAdminsModal;
+    window.filterCloudAdmins = filterCloudAdmins;
+    window.viewAdminDetails = viewAdminDetails;
+    window.manageAdminAccount = manageAdminAccount;
 
     // Close modals on outside click
     document.addEventListener('click', function(e) {
@@ -3557,6 +3946,9 @@
         if (e.target.id === 'adminOverviewModal') {
             closeAdminOverviewModal();
         }
+        if (e.target.id === 'cloudAdminsModal') {
+            closeCloudAdminsModal();
+        }
     });
     
     // Keyboard shortcuts
@@ -3572,6 +3964,7 @@
             closeAddCredentialTypeModal();
             closeEditCredentialTypeModal();
             closeAdminOverviewModal();
+            closeCloudAdminsModal();
         }
         {% if can_edit %}
         if (e.ctrlKey && e.key === 'n') {
@@ -3732,6 +4125,17 @@
                     break;
                 case 'role_management':
                     setTimeout(() => openRoleManagementModal(), 100);
+                    break;
+                case 'cloud_admins':
+                    setTimeout(() => {
+                        console.log('About to call openCloudAdminsModal via setTimeout');
+                        try {
+                            openCloudAdminsModal();
+                            console.log('openCloudAdminsModal called successfully');
+                        } catch(error) {
+                            console.error('Error calling openCloudAdminsModal:', error);
+                        }
+                    }, 100);
                     break;
             }
             // Remove the modal parameter from URL without reloading

@@ -2065,3 +2065,202 @@ def entra_role_members(request, role_id):
             'success': False,
             'error': 'Failed to get role members.'
         }, status=500)
+
+
+@login_required
+def cloud_admins(request):
+    """Get all cloud admin accounts created within the platform"""
+    try:
+        from django.db import models
+        from .models import SystemAuditLog
+        
+        # Get all admin account creation events from audit logs
+        # Try multiple possible action values that might be used for admin creation
+        admin_creation_logs = SystemAuditLog.objects.filter(
+            models.Q(action='ADMIN_CREATE') | 
+            models.Q(action='USER_CREATE') |
+            models.Q(action='CREATE_ADMIN') |
+            models.Q(description__icontains='admin account') |
+            models.Q(description__icontains='Created admin'),
+            success=True
+        ).order_by('-timestamp')
+        
+        logger.info(f"Found {admin_creation_logs.count()} admin creation logs")
+        for log in admin_creation_logs:
+            logger.info(f"Log {log.id}: action={log.action}, category={log.category}, details={log.details}")
+        
+        admins = []
+        processed_accounts = set()  # To avoid duplicates
+        
+        for log in admin_creation_logs:
+            try:
+                details = log.details or {}
+                
+                # Extract platform - if not in details, infer from category or action
+                platform = details.get('platform', 'unknown').lower()
+                if platform == 'unknown' and log.category == 'SECURITY' and 'admin account' in (log.description or ''):
+                    platform = 'entra'  # Assume Entra for security admin creation
+                
+                # Extract user identifier from details or description
+                user_identifier = (
+                    details.get('user_principal_name') or 
+                    details.get('username') or 
+                    details.get('display_name') or 
+                    details.get('target_user')
+                )
+                
+                # If no identifier in details, try to extract from description
+                if not user_identifier and log.description:
+                    desc = log.description
+                    # Look for email pattern in description like "Wright_Drea@domain.com"
+                    import re
+                    email_match = re.search(r'([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+)', desc)
+                    if email_match:
+                        user_identifier = email_match.group(1)
+                    else:
+                        # Look for pattern like "Created admin account: USERNAME"
+                        name_match = re.search(r'admin account:\s*([^\s]+)', desc)
+                        if name_match:
+                            user_identifier = name_match.group(1)
+                
+                if not user_identifier:
+                    user_identifier = f"admin_{log.id}"  # Fallback identifier
+                
+                account_key = f"{platform}_{user_identifier}"
+                
+                if account_key in processed_accounts:
+                    continue
+                
+                processed_accounts.add(account_key)
+                
+                # Determine account status (placeholder - would need to check actual platform status)
+                enabled = True  # Default assumption, would need API calls to verify
+                
+                # Create display name from user_identifier if not available
+                display_name = details.get('display_name')
+                if not display_name and user_identifier:
+                    # Convert "Wright_Drea@domain.com" to "Wright Drea"
+                    if '@' in user_identifier:
+                        name_part = user_identifier.split('@')[0]
+                        display_name = name_part.replace('_', ' ').replace('.', ' ')
+                    else:
+                        display_name = user_identifier.replace('_', ' ')
+                
+                admin_data = {
+                    'id': f"{platform}_{log.id}",
+                    'platform': platform,
+                    'display_name': display_name or user_identifier,
+                    'user_principal_name': user_identifier if '@' in str(user_identifier) else details.get('mail'),
+                    'mail': details.get('mail', user_identifier if '@' in str(user_identifier) else None),
+                    'enabled': enabled,
+                    'created_at': log.timestamp.isoformat(),
+                    'last_activity': None,  # Would need to track this separately
+                    'created_by': log.user.username if log.user else 'System'
+                }
+                
+                admins.append(admin_data)
+                
+            except Exception as e:
+                logger.warning(f"Error processing admin log {log.id}: {e}")
+                continue
+        
+        # Calculate statistics
+        stats = {
+            'total_admins': len(admins),
+            'entra_admins': len([a for a in admins if a['platform'] == 'entra']),
+            'proxmox_admins': len([a for a in admins if a['platform'] == 'proxmox']),
+            'active_this_month': len(admins)  # Simplified - all are "active"
+        }
+        
+        # Transform for frontend compatibility
+        accounts = []
+        for admin in admins:
+            accounts.append({
+                'username': admin.get('user_principal_name', admin.get('display_name', 'Unknown')),
+                'account_name': admin.get('display_name', admin.get('user_principal_name', 'Unknown')),
+                'platform': admin['platform'].title(),
+                'status': 'enabled' if admin.get('enabled', True) else 'disabled',
+                'created_date': admin['created_at'][:10],  # Just the date part
+                'created_by': admin.get('created_by', 'System')
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'stats': stats,
+            'accounts': accounts,
+            'total_count': len(accounts)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in cloud_admins view: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to load admin accounts'
+        })
+
+@login_required
+def create_test_admin_logs(request):
+    """Create test admin account audit logs for testing Cloud Admins functionality"""
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': 'Not authorized'})
+    
+    try:
+        from .models import SystemAuditLog
+        from django.utils import timezone
+        import json
+        
+        # Create test admin logs
+        test_admins = [
+            {
+                'platform': 'entra',
+                'display_name': 'John Admin',
+                'user_principal_name': 'john.admin@company.com',
+                'mail': 'john.admin@company.com'
+            },
+            {
+                'platform': 'entra', 
+                'display_name': 'Sarah Manager',
+                'user_principal_name': 'sarah.manager@company.com',
+                'mail': 'sarah.manager@company.com'
+            },
+            {
+                'platform': 'proxmox',
+                'display_name': 'proxmox-admin-01',
+                'username': 'proxmox-admin-01'
+            }
+        ]
+        
+        created_count = 0
+        for admin_data in test_admins:
+            # Check if already exists
+            existing = SystemAuditLog.objects.filter(
+                action='ADMIN_CREATE',
+                success=True,
+                details__user_principal_name=admin_data.get('user_principal_name'),
+                details__username=admin_data.get('username')
+            ).exists()
+            
+            if not existing:
+                SystemAuditLog.objects.create(
+                    user=request.user,
+                    action='ADMIN_CREATE',
+                    resource_type='admin_account',
+                    resource_id=admin_data.get('user_principal_name', admin_data.get('username')),
+                    success=True,
+                    details=admin_data,
+                    timestamp=timezone.now()
+                )
+                created_count += 1
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Created {created_count} test admin logs',
+            'created_count': created_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating test admin logs: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
