@@ -363,7 +363,7 @@
                 </button>
             </div>
             
-            <form id="addEntryForm">
+            <form id="dashboardAddEntryForm">
                 {% csrf_token %}
                 <div class="form-group">
                     <label class="form-label">Entry Name *</label>
@@ -1018,7 +1018,7 @@
     
     function closeAddEntryModal() {
         document.getElementById('addEntryModal').style.display = 'none';
-        document.getElementById('addEntryForm').reset();
+        document.getElementById('dashboardAddEntryForm').reset();
     }
     
     function closePasswordModal() {
@@ -1135,7 +1135,7 @@
     // CSRF Token Helper - Get from form input
     function getCSRFToken() {
         // Get token from the form's hidden input
-        const formToken = document.querySelector('#addEntryForm [name=csrfmiddlewaretoken]');
+        const formToken = document.querySelector('#dashboardAddEntryForm [name=csrfmiddlewaretoken]');
         if (formToken) {
             return formToken.value;
         }
@@ -1209,7 +1209,7 @@
 
     // Form Submission
     {% if can_edit %}
-    document.getElementById('addEntryForm').addEventListener('submit', function(e) {
+    document.getElementById('dashboardAddEntryForm').addEventListener('submit', function(e) {
         e.preventDefault();
         
         // Get form data
@@ -2250,6 +2250,66 @@
         }
     }
     
+    function loadEntraConfiguration() {
+        // Load current Entra configuration
+        fetch('/ajax/entra-config/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.config) {
+                const form = document.getElementById('entraConfigForm');
+                if (form) {
+                    form.tenant_id.value = data.config.tenant_id || '';
+                    form.client_id.value = data.config.client_id || '';
+                    form.auto_sync.checked = data.config.auto_sync || false;
+                    // Don't populate client_secret for security
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading Entra configuration:', error);
+        });
+        
+        // Load recent Entra activity
+        loadEntraActivity();
+    }
+    
+    function loadEntraActivity() {
+        fetch('/ajax/entra-activity/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('entraActivityList');
+            if (!container) return;
+            
+            if (data.success && data.activities && data.activities.length > 0) {
+                const activitiesHTML = data.activities.map(activity => `
+                    <div style="padding: var(--space-sm); border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600; color: var(--pure-white);">${activity.description}</div>
+                            <div style="font-size: 12px; color: var(--slate-muted);">${activity.user} • ${activity.timestamp}</div>
+                        </div>
+                        <div class="badge badge-${activity.status.toLowerCase()}">${activity.status}</div>
+                    </div>
+                `).join('');
+                container.innerHTML = activitiesHTML;
+            } else {
+                container.innerHTML = '<div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">No recent activity</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading Entra activity:', error);
+        });
+    }
+    
     function testEntraConnection() {
         const button = event.target;
         const originalContent = button.innerHTML;
@@ -2290,7 +2350,1005 @@
     
     // Entra operation functions (stubs for now)
     function openEntraUserLookup() {
-        showNotification('Entra user lookup feature coming soon!', 'info');
+        console.log('Opening Entra user lookup modal...');
+        const modal = document.getElementById('entraUserLookupModal');
+        console.log('Modal element:', modal);
+        
+        if (modal) {
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            // Reset the form and results
+            const searchForm = document.getElementById('entraUserSearchForm');
+            if (searchForm) searchForm.reset();
+            
+            const searchResults = document.getElementById('entraUserSearchResults');
+            if (searchResults) searchResults.style.display = 'none';
+            
+            const detailsPanel = document.getElementById('entraUserDetailsPanel');
+            if (detailsPanel) detailsPanel.style.display = 'none';
+            
+            const preview = document.getElementById('adminCreationPreview');
+            if (preview) preview.style.display = 'none';
+            
+            console.log('Modal opened successfully');
+        } else {
+            console.error('User lookup modal not found in DOM');
+            showNotification('User lookup modal not found', 'error');
+        }
+    }
+    
+    function closeEntraUserLookupModal() {
+        const modal = document.getElementById('entraUserLookupModal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+    }
+    
+    // Global variable to store current user data
+    let currentEntraUser = null;
+    
+    function searchEntraUser(event) {
+        event.preventDefault();
+        
+        const searchInput = document.getElementById('entraUserSearchInput');
+        const searchTerm = searchInput.value.trim();
+        
+        if (searchTerm.length < 3) {
+            showNotification('Please enter at least 3 characters', 'warning');
+            return;
+        }
+        
+        // Show loading state
+        const resultsDiv = document.getElementById('entraUserResultsList');
+        resultsDiv.innerHTML = '<div style="text-align: center; padding: var(--space-xl);"><i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i><div>Searching...</div></div>';
+        document.getElementById('entraUserSearchResults').style.display = 'block';
+        
+        // Make API call
+        fetch('/ajax/entra-user-search/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ search: searchTerm })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displaySearchResults(data.users);
+            } else {
+                resultsDiv.innerHTML = `<div class="alert alert-error">${data.error || 'Search failed'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error searching users:', error);
+            resultsDiv.innerHTML = '<div class="alert alert-error">An error occurred while searching</div>';
+        });
+    }
+    
+    function displaySearchResults(users) {
+        const resultsDiv = document.getElementById('entraUserResultsList');
+        
+        if (users.length === 0) {
+            resultsDiv.innerHTML = '<div class="alert alert-warning">No users found matching your search</div>';
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-md);">';
+        users.forEach(user => {
+            html += `
+                <div class="card" style="cursor: pointer; transition: all 0.3s ease;" onclick="selectEntraUser('${user.id}')">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 16px; font-weight: 600; color: var(--pure-white);">${user.displayName}</div>
+                            <div style="font-size: 14px; color: var(--electric-blue); margin-top: 4px;">${user.userPrincipalName}</div>
+                            <div style="font-size: 14px; color: var(--slate-muted); margin-top: 4px;">${user.jobTitle || 'No job title'}</div>
+                        </div>
+                        <i class="ph ph-caret-right" style="font-size: 24px; color: var(--slate-muted);"></i>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        resultsDiv.innerHTML = html;
+    }
+    
+    function selectEntraUser(userId) {
+        // Show loading state
+        const detailsPanel = document.getElementById('entraUserDetailsPanel');
+        detailsPanel.style.display = 'block';
+        
+        // Fetch full user details
+        fetch(`/ajax/entra-user-details/${userId}/`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentEntraUser = data.user;
+                displayUserDetails(data.user);
+            } else {
+                showNotification(data.error || 'Failed to load user details', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading user details:', error);
+            showNotification('Failed to load user details', 'error');
+        });
+    }
+    
+    function displayUserDetails(user) {
+        // Populate user details
+        document.getElementById('userDisplayName').textContent = user.displayName || 'N/A';
+        document.getElementById('userFirstName').textContent = user.givenName || 'N/A';
+        document.getElementById('userLastName').textContent = user.surname || 'N/A';
+        document.getElementById('userUPN').textContent = user.userPrincipalName || 'N/A';
+        document.getElementById('userEmail').textContent = user.mail || 'N/A';
+        document.getElementById('userDepartment').textContent = user.department || 'N/A';
+        document.getElementById('userJobTitle').textContent = user.jobTitle || 'N/A';
+        document.getElementById('userManager').textContent = user.manager?.displayName || 'N/A';
+        
+        // Hide search results and show details
+        document.getElementById('entraUserSearchResults').style.display = 'none';
+        document.getElementById('adminCreationPreview').style.display = 'none';
+    }
+    
+    function createAdminUser() {
+        if (!currentEntraUser) {
+            showNotification('No user selected', 'error');
+            return;
+        }
+        
+        // Generate admin account details
+        const user = currentEntraUser;
+        const domain = user.userPrincipalName.split('@')[1];
+        
+        // Generate admin UPN: Lastname_Firstname@domain
+        const adminUPN = `${user.surname}_${user.givenName}@${domain}`;
+        
+        // Generate admin email with +admin
+        let adminEmail = user.mail;
+        if (adminEmail && adminEmail.includes('@')) {
+            const [localPart, emailDomain] = adminEmail.split('@');
+            adminEmail = `${localPart}+admin@${emailDomain}`;
+        }
+        
+        // Generate admin job title
+        const adminJobTitle = user.jobTitle ? `${user.jobTitle} Admin` : 'Administrator';
+        
+        // Generate admin employee ID
+        const adminEmployeeId = user.employeeId ? `${user.employeeId}A` : 'A' + Date.now();
+        
+        // Display preview
+        document.getElementById('adminPreviewUPN').textContent = adminUPN;
+        document.getElementById('adminPreviewEmail').textContent = adminEmail;
+        document.getElementById('adminPreviewJobTitle').textContent = adminJobTitle;
+        document.getElementById('adminPreviewEmployeeId').textContent = adminEmployeeId;
+        
+        // Store admin data for creation
+        window.pendingAdminUser = {
+            sourceUserId: user.id,
+            userPrincipalName: adminUPN,
+            displayName: `${user.displayName} (Admin)`,
+            givenName: user.givenName,
+            surname: user.surname,
+            mail: adminEmail,
+            jobTitle: adminJobTitle,
+            department: user.department,
+            employeeId: adminEmployeeId,
+            accountEnabled: true
+        };
+        
+        // Show preview
+        document.getElementById('adminCreationPreview').style.display = 'block';
+    }
+    
+    function confirmCreateAdmin() {
+        if (!window.pendingAdminUser) {
+            showNotification('No admin user data available', 'error');
+            return;
+        }
+        
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Creating...';
+        button.disabled = true;
+        
+        fetch('/ajax/entra-create-admin/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(window.pendingAdminUser)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Admin account created successfully!', 'success');
+                closeEntraUserLookupModal();
+                // Refresh activity logs
+                loadEntraActivity();
+            } else {
+                showNotification(data.error || 'Failed to create admin account', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error creating admin account:', error);
+            showNotification('An error occurred while creating admin account', 'error');
+        })
+        .finally(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    function cancelAdminCreation() {
+        document.getElementById('adminCreationPreview').style.display = 'none';
+        window.pendingAdminUser = null;
+    }
+    
+    function viewUserRoles() {
+        if (!currentEntraUser) {
+            showNotification('No user selected', 'error');
+            return;
+        }
+        openEntraRoleManagementModal();
+    }
+    
+    // Global variable to store current user roles
+    let currentUserRoles = [];
+    let availableRoles = [];
+    
+    function openEntraRoleManagementModal() {
+        console.log('Opening Entra role management modal...');
+        const modal = document.getElementById('entraRoleManagementModal');
+        
+        if (modal) {
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            
+            // Populate user info in modal header
+            if (currentEntraUser) {
+                document.getElementById('roleUserDisplayName').textContent = currentEntraUser.displayName;
+                document.getElementById('roleUserUPN').textContent = currentEntraUser.userPrincipalName;
+                document.getElementById('roleUserJobTitle').textContent = currentEntraUser.jobTitle || 'N/A';
+            }
+            
+            // Load current roles and available roles
+            loadUserRoles();
+            loadAvailableRoles();
+        } else {
+            console.error('Role management modal not found in DOM');
+            showNotification('Role management modal not found', 'error');
+        }
+    }
+    
+    function closeEntraRoleManagementModal() {
+        const modal = document.getElementById('entraRoleManagementModal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+    }
+    
+    function loadUserRoles() {
+        if (!currentEntraUser) return;
+        
+        const currentRolesDiv = document.getElementById('currentRolesList');
+        currentRolesDiv.innerHTML = '<div class="loading-indicator"><i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Loading current roles...</div>';
+        
+        fetch(`/ajax/entra-user-roles/${currentEntraUser.id}/`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUserRoles = data.roles;
+                displayCurrentRoles(data.roles);
+            } else {
+                currentRolesDiv.innerHTML = `<div class="alert alert-error">${data.error || 'Failed to load current roles'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading user roles:', error);
+            currentRolesDiv.innerHTML = '<div class="alert alert-error">Failed to load current roles</div>';
+        });
+    }
+    
+    function loadAvailableRoles() {
+        const availableRolesDiv = document.getElementById('availableRolesList');
+        availableRolesDiv.innerHTML = '<div class="loading-indicator"><i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Loading available roles...</div>';
+        
+        fetch('/ajax/entra-available-roles/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                availableRoles = data.roles;
+                displayAvailableRoles(data.roles);
+            } else {
+                availableRolesDiv.innerHTML = `<div class="alert alert-error">${data.error || 'Failed to load available roles'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading available roles:', error);
+            availableRolesDiv.innerHTML = '<div class="alert alert-error">Failed to load available roles</div>';
+        });
+    }
+    
+    function displayCurrentRoles(roles) {
+        const currentRolesDiv = document.getElementById('currentRolesList');
+        
+        if (roles.length === 0) {
+            currentRolesDiv.innerHTML = '<div class="alert alert-info">No roles currently assigned</div>';
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-sm);">';
+        roles.forEach(role => {
+            const typeIcon = role.assignment_type === 'PERMANENT' ? 'ph-shield-check' : 'ph-clock';
+            const typeColor = role.assignment_type === 'PERMANENT' ? 'var(--success-color)' : 'var(--warning-color)';
+            
+            html += `
+                <div class="role-item" style="background: var(--glass-surface); border-radius: var(--border-radius); padding: var(--space-md); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600; color: var(--pure-white); margin-bottom: 4px;">${role.display_name}</div>
+                            <div style="font-size: 14px; color: var(--slate-muted); margin-bottom: 8px;">${role.description || 'No description'}</div>
+                            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <i class="ph ${typeIcon}" style="color: ${typeColor};"></i>
+                                <span style="font-size: 14px; color: ${typeColor};">${role.assignment_type}</span>
+                                ${role.end_datetime ? `<span style="font-size: 12px; color: var(--slate-muted);">Until: ${new Date(role.end_datetime).toLocaleDateString()}</span>` : ''}
+                            </div>
+                        </div>
+                        <button onclick="removeRole('${role.role_id}')" class="button button-danger" style="padding: var(--space-xs) var(--space-sm);">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        currentRolesDiv.innerHTML = html;
+    }
+    
+    function displayAvailableRoles(roles) {
+        const availableRolesDiv = document.getElementById('availableRolesList');
+        
+        if (roles.length === 0) {
+            availableRolesDiv.innerHTML = '<div class="alert alert-info">No roles available for assignment</div>';
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-sm);">';
+        roles.forEach(role => {
+            // Check if role is already assigned
+            const isAssigned = currentUserRoles.some(currentRole => currentRole.role_id === role.id);
+            
+            html += `
+                <div class="role-item ${isAssigned ? 'assigned' : ''}" style="background: var(--glass-surface); border-radius: var(--border-radius); padding: var(--space-md); border: 1px solid var(--glass-border); ${isAssigned ? 'opacity: 0.6;' : 'cursor: pointer;'}" ${!isAssigned ? `onclick="selectRoleForAssignment('${role.id}')"` : ''}>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--pure-white); margin-bottom: 4px;">
+                                ${role.display_name}
+                                ${isAssigned ? '<span style="color: var(--success-color); font-size: 12px; margin-left: 8px;">(Assigned)</span>' : ''}
+                            </div>
+                            <div style="font-size: 14px; color: var(--slate-muted);">${role.description || 'No description'}</div>
+                        </div>
+                        ${!isAssigned ? '<i class="ph ph-plus" style="color: var(--electric-blue); font-size: 20px;"></i>' : ''}
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        availableRolesDiv.innerHTML = html;
+    }
+    
+    function filterAvailableRoles() {
+        const searchTerm = document.getElementById('roleSearchInput').value.toLowerCase();
+        const typeFilter = document.getElementById('roleTypeFilter').value.toLowerCase();
+        
+        let filteredRoles = availableRoles.filter(role => {
+            // Text search filter
+            const matchesSearch = !searchTerm || 
+                role.display_name.toLowerCase().includes(searchTerm) || 
+                (role.description && role.description.toLowerCase().includes(searchTerm));
+            
+            // Type filter (basic categorization based on role name)
+            let matchesType = !typeFilter;
+            if (typeFilter) {
+                const roleName = role.display_name.toLowerCase();
+                switch(typeFilter) {
+                    case 'admin':
+                        matchesType = roleName.includes('admin') || roleName.includes('administrator');
+                        break;
+                    case 'security':
+                        matchesType = roleName.includes('security') || roleName.includes('compliance') || roleName.includes('audit');
+                        break;
+                    case 'compliance':
+                        matchesType = roleName.includes('compliance') || roleName.includes('risk') || roleName.includes('governance');
+                        break;
+                    case 'custom':
+                        matchesType = !role.is_built_in;
+                        break;
+                }
+            }
+            
+            return matchesSearch && matchesType;
+        });
+        
+        displayAvailableRoles(filteredRoles);
+    }
+    
+    function filterRoles() {
+        // Alias for backward compatibility
+        filterAvailableRoles();
+    }
+    
+    let selectedRoleId = null;
+    
+    function selectRoleForAssignment(roleId) {
+        selectedRoleId = roleId;
+        const role = availableRoles.find(r => r.id === roleId);
+        
+        if (role) {
+            document.getElementById('selectedRoleName').textContent = role.display_name;
+            document.getElementById('roleAssignmentOptions').style.display = 'block';
+            
+            // Reset form
+            document.querySelector('input[name="assignmentType"][value="permanent"]').checked = true;
+            document.getElementById('eligibleDurationOptions').style.display = 'none';
+            document.getElementById('assignmentJustification').value = '';
+        }
+    }
+    
+    function onAssignmentTypeChange() {
+        const assignmentType = document.querySelector('input[name="assignmentType"]:checked').value;
+        const durationDiv = document.getElementById('eligibleDurationOptions');
+        
+        if (assignmentType === 'eligible') {
+            durationDiv.style.display = 'block';
+        } else {
+            durationDiv.style.display = 'none';
+        }
+    }
+    
+    function assignRole() {
+        if (!selectedRoleId || !currentEntraUser) {
+            showNotification('No role or user selected', 'error');
+            return;
+        }
+        
+        const assignmentType = document.querySelector('input[name="assignmentType"]:checked').value.toUpperCase();
+        const justification = document.getElementById('assignmentJustification').value.trim();
+        let duration = null;
+        
+        if (assignmentType === 'ELIGIBLE') {
+            duration = document.getElementById('eligibilityDuration').value;
+            if (!duration) {
+                showNotification('Please specify duration for eligible assignments', 'error');
+                return;
+            }
+        }
+        
+        if (!justification) {
+            showNotification('Justification is required for role assignments', 'error');
+            return;
+        }
+        
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Assigning...';
+        button.disabled = true;
+        
+        const assignmentData = {
+            user_id: currentEntraUser.id,
+            role_id: selectedRoleId,
+            assignment_type: assignmentType,
+            justification: justification,
+            duration_hours: duration
+        };
+        
+        fetch('/ajax/entra-assign-role/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(assignmentData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Role assigned successfully!', 'success');
+                // Refresh roles
+                loadUserRoles();
+                loadAvailableRoles();
+                // Hide assignment options
+                document.getElementById('roleAssignmentOptions').style.display = 'none';
+                selectedRoleId = null;
+            } else {
+                showNotification(data.error || 'Failed to assign role', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error assigning role:', error);
+            showNotification('An error occurred while assigning role', 'error');
+        })
+        .finally(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    function removeRole(roleId) {
+        if (!currentEntraUser || !roleId) {
+            showNotification('Invalid role or user', 'error');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to remove this role assignment?')) {
+            return;
+        }
+        
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i>';
+        button.disabled = true;
+        
+        fetch('/ajax/entra-remove-role/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: currentEntraUser.id,
+                role_id: roleId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Role removed successfully!', 'success');
+                // Refresh roles
+                loadUserRoles();
+                loadAvailableRoles();
+            } else {
+                showNotification(data.error || 'Failed to remove role', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error removing role:', error);
+            showNotification('An error occurred while removing role', 'error');
+        })
+        .finally(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    function cancelRoleAssignment() {
+        document.getElementById('roleAssignmentOptions').style.display = 'none';
+        selectedRoleId = null;
+    }
+    
+    // ==================================================
+    // Role Management Modal Functions (Role-centric view)
+    // ==================================================
+    
+    let managementRoles = [];
+    let selectedManagementRole = null;
+    let selectedUserForRoleAssignment = null;
+    
+    function openRoleManagementModal() {
+        const modal = document.getElementById('roleManagementModal');
+        
+        if (modal) {
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            
+            // Reset the modal state
+            document.getElementById('selectedRoleDetails').style.display = 'none';
+            document.getElementById('userSearchResults').style.display = 'none';
+            document.getElementById('userAssignmentOptions').style.display = 'none';
+            selectedManagementRole = null;
+            selectedUserForRoleAssignment = null;
+            
+            // Load available roles
+            loadRolesForManagement();
+        } else {
+            console.error('Role management modal not found in DOM');
+            showNotification('Role management modal not found', 'error');
+        }
+    }
+    
+    function closeRoleManagementModal() {
+        const modal = document.getElementById('roleManagementModal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+    }
+    
+    function loadRolesForManagement() {
+        const rolesList = document.getElementById('roleManagementRolesList');
+        rolesList.innerHTML = '<div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);"><i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i><div>Loading roles...</div></div>';
+        
+        fetch('/ajax/entra-available-roles/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                managementRoles = data.roles;
+                displayRolesForManagement(data.roles);
+            } else {
+                rolesList.innerHTML = `<div class="alert alert-error">${data.error || 'Failed to load roles'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading roles:', error);
+            rolesList.innerHTML = '<div class="alert alert-error">Failed to load roles</div>';
+        });
+    }
+    
+    function displayRolesForManagement(roles) {
+        const rolesList = document.getElementById('roleManagementRolesList');
+        
+        if (roles.length === 0) {
+            rolesList.innerHTML = '<div class="alert alert-warning">No roles found</div>';
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-sm);">';
+        roles.forEach(role => {
+            html += `
+                <div class="card" style="cursor: pointer; transition: all 0.3s ease; border: 1px solid var(--glass-border);" onclick="selectRoleForManagement('${role.id}')">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 16px; font-weight: 600; color: var(--pure-white); margin-bottom: 4px;">${role.display_name}</div>
+                            <div style="font-size: 14px; color: var(--slate-muted);">${role.description || 'No description available'}</div>
+                        </div>
+                        <i class="ph ph-caret-right" style="font-size: 24px; color: var(--slate-muted);"></i>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        rolesList.innerHTML = html;
+    }
+    
+    function filterRolesForManagement() {
+        const searchTerm = document.getElementById('roleManagementSearchInput').value.toLowerCase();
+        const filteredRoles = managementRoles.filter(role => 
+            role.display_name.toLowerCase().includes(searchTerm) || 
+            (role.description && role.description.toLowerCase().includes(searchTerm))
+        );
+        displayRolesForManagement(filteredRoles);
+    }
+    
+    function selectRoleForManagement(roleId) {
+        selectedManagementRole = managementRoles.find(r => r.id === roleId);
+        
+        if (selectedManagementRole) {
+            // Update role details section
+            document.getElementById('selectedRoleDisplayName').textContent = selectedManagementRole.display_name;
+            document.getElementById('selectedRoleDescription').textContent = selectedManagementRole.description || 'No description available';
+            document.getElementById('selectedRoleDetails').style.display = 'block';
+            
+            // Load current members
+            loadRoleMembers(roleId);
+            
+            // Reset user assignment section
+            document.getElementById('userSearchResults').style.display = 'none';
+            document.getElementById('userAssignmentOptions').style.display = 'none';
+            document.getElementById('userSearchInput').value = '';
+        }
+    }
+    
+    function loadRoleMembers(roleId) {
+        const membersList = document.getElementById('currentMembersList');
+        membersList.innerHTML = '<div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);"><i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i><div>Loading members...</div></div>';
+        
+        fetch(`/ajax/entra-role-members/${roleId}/`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayRoleMembers(data.members);
+            } else {
+                membersList.innerHTML = `<div class="alert alert-error">${data.error || 'Failed to load members'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading role members:', error);
+            membersList.innerHTML = '<div class="alert alert-error">Failed to load members</div>';
+        });
+    }
+    
+    function displayRoleMembers(members) {
+        const membersList = document.getElementById('currentMembersList');
+        const membersCount = document.getElementById('currentMembersCount');
+        
+        membersCount.textContent = members.length;
+        
+        if (members.length === 0) {
+            membersList.innerHTML = '<div class="alert alert-info">No members assigned to this role</div>';
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-sm);">';
+        members.forEach(member => {
+            const assignmentTypeIcon = member.assignment_type === 'PERMANENT' ? 'ph-shield-check' : 'ph-clock';
+            const assignmentTypeColor = member.assignment_type === 'PERMANENT' ? 'var(--success-color)' : 'var(--warning-color)';
+            
+            html += `
+                <div class="card" style="background: var(--glass-surface); border: 1px solid var(--glass-border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--pure-white); margin-bottom: 4px;">${member.display_name}</div>
+                            <div style="font-size: 14px; color: var(--electric-blue); margin-bottom: 4px;">${member.user_principal_name}</div>
+                            <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                                <i class="ph ${assignmentTypeIcon}" style="color: ${assignmentTypeColor};"></i>
+                                <span style="font-size: 12px; color: ${assignmentTypeColor};">${member.assignment_type}</span>
+                                ${member.end_datetime ? `<span style="font-size: 12px; color: var(--slate-muted);">Until: ${new Date(member.end_datetime).toLocaleDateString()}</span>` : ''}
+                            </div>
+                        </div>
+                        <button onclick="removeUserFromRole('${member.user_id}')" class="button button-danger" style="padding: var(--space-xs) var(--space-sm);">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        membersList.innerHTML = html;
+    }
+    
+    function searchUsersForRole() {
+        const searchTerm = document.getElementById('userSearchInput').value.trim();
+        
+        if (searchTerm.length < 3) {
+            document.getElementById('userSearchResults').style.display = 'none';
+            return;
+        }
+        
+        const resultsList = document.getElementById('userSearchResultsList');
+        resultsList.innerHTML = '<div style="text-align: center; padding: var(--space-md);"><i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Searching...</div>';
+        document.getElementById('userSearchResults').style.display = 'block';
+        
+        fetch('/ajax/entra-user-search/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ search: searchTerm })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayUserSearchResults(data.users);
+            } else {
+                resultsList.innerHTML = `<div class="alert alert-error">${data.error || 'Search failed'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error searching users:', error);
+            resultsList.innerHTML = '<div class="alert alert-error">Search failed</div>';
+        });
+    }
+    
+    function displayUserSearchResults(users) {
+        const resultsList = document.getElementById('userSearchResultsList');
+        
+        if (users.length === 0) {
+            resultsList.innerHTML = '<div class="alert alert-warning">No users found</div>';
+            return;
+        }
+        
+        let html = '<div style="display: grid; gap: var(--space-sm);">';
+        users.forEach(user => {
+            html += `
+                <div class="card" style="cursor: pointer; transition: all 0.3s ease; border: 1px solid var(--glass-border);" onclick="selectUserForRole('${user.id}', '${user.displayName}', '${user.userPrincipalName}')">
+                    <div>
+                        <div style="font-size: 16px; font-weight: 600; color: var(--pure-white);">${user.displayName}</div>
+                        <div style="font-size: 14px; color: var(--electric-blue); margin-top: 4px;">${user.userPrincipalName}</div>
+                        <div style="font-size: 14px; color: var(--slate-muted); margin-top: 4px;">${user.jobTitle || 'No job title'}</div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        resultsList.innerHTML = html;
+    }
+    
+    function selectUserForRole(userId, displayName, userPrincipalName) {
+        selectedUserForRoleAssignment = { id: userId, displayName, userPrincipalName };
+        
+        document.getElementById('selectedUserName').textContent = displayName;
+        document.getElementById('selectedUserUPN').textContent = userPrincipalName;
+        document.getElementById('userAssignmentOptions').style.display = 'block';
+        document.getElementById('userSearchResults').style.display = 'none';
+        
+        // Reset form
+        document.querySelector('input[name="memberAssignmentType"][value="permanent"]').checked = true;
+        document.getElementById('memberEligibleDurationOptions').style.display = 'none';
+        document.getElementById('memberAssignmentJustification').value = '';
+    }
+    
+    function onMemberAssignmentTypeChange() {
+        const assignmentType = document.querySelector('input[name="memberAssignmentType"]:checked').value;
+        const durationDiv = document.getElementById('memberEligibleDurationOptions');
+        
+        if (assignmentType === 'eligible') {
+            durationDiv.style.display = 'block';
+        } else {
+            durationDiv.style.display = 'none';
+        }
+    }
+    
+    function assignUserToRole() {
+        if (!selectedUserForRoleAssignment || !selectedManagementRole) {
+            showNotification('No user or role selected', 'error');
+            return;
+        }
+        
+        const assignmentType = document.querySelector('input[name="memberAssignmentType"]:checked').value.toUpperCase();
+        const justification = document.getElementById('memberAssignmentJustification').value.trim();
+        let duration = null;
+        
+        if (assignmentType === 'ELIGIBLE') {
+            const durationValue = document.getElementById('memberEligibilityDuration').value;
+            if (!durationValue) {
+                showNotification('Please specify duration for eligible assignments', 'error');
+                return;
+            }
+            // Convert ISO 8601 duration to hours
+            duration = convertISO8601ToHours(durationValue);
+        }
+        
+        if (!justification) {
+            showNotification('Justification is required for role assignments', 'error');
+            return;
+        }
+        
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Assigning...';
+        button.disabled = true;
+        
+        const assignmentData = {
+            user_id: selectedUserForRoleAssignment.id,
+            role_id: selectedManagementRole.id,
+            assignment_type: assignmentType,
+            justification: justification,
+            duration_hours: duration
+        };
+        
+        fetch('/ajax/entra-assign-role/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(assignmentData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Role assigned successfully!', 'success');
+                // Refresh the members list
+                loadRoleMembers(selectedManagementRole.id);
+                // Reset assignment form
+                cancelUserAssignment();
+            } else {
+                showNotification(data.error || 'Failed to assign role', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error assigning role:', error);
+            showNotification('An error occurred while assigning role', 'error');
+        })
+        .finally(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    function removeUserFromRole(userId) {
+        if (!selectedManagementRole || !userId) {
+            showNotification('Invalid role or user', 'error');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to remove this user from the role?')) {
+            return;
+        }
+        
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i>';
+        button.disabled = true;
+        
+        fetch('/ajax/entra-remove-role/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                role_id: selectedManagementRole.id
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('User removed from role successfully!', 'success');
+                // Refresh the members list
+                loadRoleMembers(selectedManagementRole.id);
+            } else {
+                showNotification(data.error || 'Failed to remove user from role', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error removing user from role:', error);
+            showNotification('An error occurred while removing user', 'error');
+        })
+        .finally(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    function cancelUserAssignment() {
+        document.getElementById('userAssignmentOptions').style.display = 'none';
+        document.getElementById('userSearchInput').value = '';
+        document.getElementById('userSearchResults').style.display = 'none';
+        selectedUserForRoleAssignment = null;
+    }
+    
+    function convertISO8601ToHours(iso8601Duration) {
+        // Convert ISO 8601 duration strings to hours
+        const durationMap = {
+            'PT8H': 8,        // 8 hours
+            'P1D': 24,        // 1 day = 24 hours
+            'P7D': 168,       // 7 days = 168 hours
+            'P30D': 720,      // 30 days = 720 hours
+            'P90D': 2160,     // 90 days = 2160 hours
+            'P365D': 8760     // 365 days = 8760 hours
+        };
+        
+        return durationMap[iso8601Duration] || 168; // Default to 7 days if not found
+    }
+    
+    function viewUserGroups() {
+        if (!currentEntraUser) {
+            showNotification('No user selected', 'error');
+            return;
+        }
+        showNotification('User groups feature coming soon!', 'info');
     }
     
     function openEntraUserCreate() {
@@ -2315,6 +3373,29 @@
     window.openEntraUserCreate = openEntraUserCreate;
     window.openEntraRoleAssignment = openEntraRoleAssignment;
     window.openEntraServicePrincipal = openEntraServicePrincipal;
+    
+    // Make role management functions globally available
+    window.viewUserRoles = viewUserRoles;
+    window.openEntraRoleManagementModal = openEntraRoleManagementModal;
+    window.closeEntraRoleManagementModal = closeEntraRoleManagementModal;
+    window.onAssignmentTypeChange = onAssignmentTypeChange;
+    window.filterAvailableRoles = filterAvailableRoles;
+    window.selectRoleForAssignment = selectRoleForAssignment;
+    window.assignRole = assignRole;
+    window.removeRole = removeRole;
+    window.cancelRoleAssignment = cancelRoleAssignment;
+    
+    // Role Management Modal functions
+    window.openRoleManagementModal = openRoleManagementModal;
+    window.closeRoleManagementModal = closeRoleManagementModal;
+    window.filterRolesForManagement = filterRolesForManagement;
+    window.selectRoleForManagement = selectRoleForManagement;
+    window.searchUsersForRole = searchUsersForRole;
+    window.selectUserForRole = selectUserForRole;
+    window.onMemberAssignmentTypeChange = onMemberAssignmentTypeChange;
+    window.assignUserToRole = assignUserToRole;
+    window.removeUserFromRole = removeUserFromRole;
+    window.cancelUserAssignment = cancelUserAssignment;
     
     function closeAdminOverviewModal() {
         document.getElementById('adminOverviewModal').style.display = 'none';
@@ -2581,6 +3662,53 @@
         // Sync for edit form will be done when modal opens
         const editModal = document.getElementById('editCredentialTypeModal');
         
+        // Add Entra configuration form handler
+        const entraConfigForm = document.getElementById('entraConfigForm');
+        if (entraConfigForm) {
+            entraConfigForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(this);
+                const data = {
+                    tenant_id: formData.get('tenant_id'),
+                    client_id: formData.get('client_id'),
+                    client_secret: formData.get('client_secret'),
+                    auto_sync: formData.get('auto_sync') === 'on'
+                };
+                
+                const submitButton = this.querySelector('button[type="submit"]');
+                const originalContent = submitButton.innerHTML;
+                submitButton.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Saving...';
+                submitButton.disabled = true;
+                
+                fetch('/ajax/entra-config/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCSRFToken(),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification(data.message, 'success');
+                        loadIntegrationOverview(); // Refresh overview
+                    } else {
+                        showNotification(data.error || 'Failed to save configuration', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving Entra config:', error);
+                    showNotification('An unexpected error occurred', 'error');
+                })
+                .finally(() => {
+                    submitButton.innerHTML = originalContent;
+                    submitButton.disabled = false;
+                });
+            });
+        }
+        
         // Check URL parameters for modal to open
         const urlParams = new URLSearchParams(window.location.search);
         const modalParam = urlParams.get('modal');
@@ -2601,6 +3729,9 @@
                     break;
                 case 'integrations':
                     setTimeout(() => openIntegrationsModal(), 100);
+                    break;
+                case 'role_management':
+                    setTimeout(() => openRoleManagementModal(), 100);
                     break;
             }
             // Remove the modal parameter from URL without reloading

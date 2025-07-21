@@ -11,7 +11,12 @@ from .views import (
     vault_entries_view, credential_types_view, user_management_view,
     audit_logs_view, api_docs_view, create_vault_entry, update_vault_entry,
     get_vault_entry, delete_vault_entry, get_users, create_user, update_user, delete_user,
-    get_audit_logs, get_credential_types, create_credential_type, update_credential_type, delete_credential_type
+    get_audit_logs, get_credential_types, create_credential_type, update_credential_type, delete_credential_type,
+    # Integration endpoints
+    integration_overview, entra_config, entra_test, entra_activity, admin_overview,
+    entra_user_search, entra_user_details, entra_create_admin,
+    # Role management endpoints
+    entra_user_roles, entra_available_roles, entra_assign_role, entra_remove_role, entra_role_members
 )
 
 # Create a router for DRF ViewSets
@@ -65,4 +70,21 @@ urlpatterns = [
     path('ajax/credential-type/create/', create_credential_type, name='ajax_create_credential_type'),
     path('ajax/credential-type/<int:type_id>/update/', update_credential_type, name='ajax_update_credential_type'),
     path('ajax/credential-type/<int:type_id>/delete/', delete_credential_type, name='ajax_delete_credential_type'),
+    
+    # AJAX endpoints for integrations
+    path('ajax/integration-overview/', integration_overview, name='ajax_integration_overview'),
+    path('ajax/admin-overview/', admin_overview, name='ajax_admin_overview'),
+    path('ajax/entra-config/', entra_config, name='ajax_entra_config'),
+    path('ajax/entra-test/', entra_test, name='ajax_entra_test'),
+    path('ajax/entra-activity/', entra_activity, name='ajax_entra_activity'),
+    path('ajax/entra-user-search/', entra_user_search, name='ajax_entra_user_search'),
+    path('ajax/entra-user-details/<str:user_id>/', entra_user_details, name='ajax_entra_user_details'),
+    path('ajax/entra-create-admin/', entra_create_admin, name='ajax_entra_create_admin'),
+    
+    # Role management endpoints
+    path('ajax/entra-user-roles/<str:user_id>/', entra_user_roles, name='ajax_entra_user_roles'),
+    path('ajax/entra-available-roles/', entra_available_roles, name='ajax_entra_available_roles'),
+    path('ajax/entra-assign-role/', entra_assign_role, name='ajax_entra_assign_role'),
+    path('ajax/entra-remove-role/', entra_remove_role, name='ajax_entra_remove_role'),
+    path('ajax/entra-role-members/<str:role_id>/', entra_role_members, name='ajax_entra_role_members'),
 ]

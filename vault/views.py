@@ -7,6 +7,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import models
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -1253,4 +1255,813 @@ def delete_credential_type(request, type_id):
         return JsonResponse({
             'success': False,
             'error': 'An unexpected error occurred.'
+        }, status=500)
+
+
+# ===============================
+# Integration AJAX Endpoints
+# ===============================
+
+@login_required
+@require_http_methods(["GET"])
+def integration_overview(request):
+    """Get integration overview statistics"""
+    try:
+        # Import here to avoid circular imports
+        from .models import IntegrationConfig, EntraUser, IntegrationTask
+        
+        # Calculate statistics
+        total_configs = IntegrationConfig.objects.count()
+        active_integrations = IntegrationConfig.objects.filter(is_enabled=True).count()
+        total_entra_users = EntraUser.objects.count()
+        pending_tasks = IntegrationTask.objects.filter(status='PENDING').count()
+        
+        # Get last sync time
+        last_sync = None
+        latest_task = IntegrationTask.objects.filter(status='COMPLETED').order_by('-completed_at').first()
+        if latest_task:
+            last_sync = latest_task.completed_at.strftime('%Y-%m-%d %H:%M')
+        
+        # Check integration statuses
+        entra_config = IntegrationConfig.objects.filter(integration_type='ENTRA', is_enabled=True).first()
+        proxmox_config = IntegrationConfig.objects.filter(integration_type='PROXMOX', is_enabled=True).first()
+        
+        return JsonResponse({
+            'success': True,
+            'stats': {
+                'total_users': total_entra_users,
+                'active_integrations': active_integrations,
+                'last_sync': last_sync or 'Never',
+                'pending_tasks': pending_tasks
+            },
+            'status': {
+                'entra': {
+                    'state': 'connected' if entra_config else 'unknown'
+                },
+                'proxmox': {
+                    'state': 'connected' if proxmox_config else 'unknown'
+                }
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting integration overview: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to load integration overview.'
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def admin_overview(request):
+    """Get admin overview statistics (for compatibility)"""
+    try:
+        from .models import CustomUser, VaultEntry, CredentialType, SystemAuditLog
+        
+        # Calculate statistics
+        total_users = CustomUser.objects.filter(is_deleted=False).count()
+        total_entries = VaultEntry.objects.filter(is_deleted=False).count()
+        total_credential_types = CredentialType.objects.filter(is_deleted=False).count()
+        recent_activity_count = SystemAuditLog.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(days=7)
+        ).count()
+        
+        stats = [
+            {'label': 'Total Users', 'value': total_users},
+            {'label': 'Vault Entries', 'value': total_entries},
+            {'label': 'Credential Types', 'value': total_credential_types},
+            {'label': 'Recent Activity', 'value': recent_activity_count},
+        ]
+        
+        return JsonResponse({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting admin overview: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to load admin overview.'
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def entra_config(request):
+    """Handle Entra configuration get/save"""
+    try:
+        from .models import IntegrationConfig
+        
+        if request.method == 'GET':
+            # Get current Entra configuration
+            try:
+                config = IntegrationConfig.objects.get(integration_type='ENTRA')
+                config_data = {
+                    'tenant_id': config.get_config_value('tenant_id', ''),
+                    'client_id': config.get_config_value('client_id', ''),
+                    'auto_sync': config.get_config_value('auto_sync', False),
+                    # Don't return client_secret for security
+                }
+                return JsonResponse({
+                    'success': True,
+                    'config': config_data
+                })
+            except IntegrationConfig.DoesNotExist:
+                return JsonResponse({
+                    'success': True,
+                    'config': {
+                        'tenant_id': '',
+                        'client_id': '',
+                        'auto_sync': False
+                    }
+                })
+        
+        elif request.method == 'POST':
+            # Save Entra configuration
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid JSON data.'
+                }, status=400)
+            
+            # Get or create Entra configuration
+            config, created = IntegrationConfig.objects.get_or_create(
+                integration_type='ENTRA',
+                defaults={
+                    'name': 'Microsoft Entra ID',
+                    'created_by': request.user
+                }
+            )
+            
+            # Update configuration
+            config.set_config_value('tenant_id', data.get('tenant_id', ''))
+            config.set_config_value('client_id', data.get('client_id', ''))
+            config.set_config_value('auto_sync', data.get('auto_sync', False))
+            
+            # Only update client_secret if provided
+            if data.get('client_secret'):
+                config.set_config_value('client_secret', data.get('client_secret'))
+            
+            # Enable integration if all required fields are provided
+            if all([data.get('tenant_id'), data.get('client_id')]):
+                config.is_enabled = True
+            
+            config.save()
+            
+            # Log the configuration change
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='CONFIG_UPDATE',
+                user=request.user,
+                description=f"Entra ID configuration {'created' if created else 'updated'}",
+                request=request,
+                severity='MEDIUM',
+                success=True
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Entra configuration saved successfully!'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error handling Entra config: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to handle Entra configuration.'
+        }, status=500)
+
+
+@login_required
+@require_POST
+def entra_test(request):
+    """Test Entra ID connection"""
+    try:
+        from .models import IntegrationConfig
+        from .entra_integration import EntraIntegrationService
+        
+        # Get Entra configuration
+        try:
+            config = IntegrationConfig.objects.get(integration_type='ENTRA', is_enabled=True)
+        except IntegrationConfig.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Test connection using the integration service
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not properly configured.'
+            }, status=400)
+        
+        # Test the connection
+        result = service.test_connection()
+        
+        # Log the test attempt
+        AuditLogger.log_security_event(
+            category='INTEGRATION',
+            action='CONNECTION_TEST',
+            user=request.user,
+            description=f"Entra ID connection test: {'successful' if result['success'] else 'failed'}",
+            request=request,
+            severity='LOW' if result['success'] else 'MEDIUM',
+            success=result['success']
+        )
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        logger.error(f"Error testing Entra connection: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Connection test failed: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def entra_activity(request):
+    """Get recent Entra integration activities"""
+    try:
+        from datetime import timedelta
+        from django.utils import timezone
+        
+        # Get recent Entra-related audit logs
+        recent_logs = SystemAuditLog.objects.filter(
+            category='INTEGRATION',
+            timestamp__gte=timezone.now() - timedelta(days=7)
+        ).order_by('-timestamp')[:10]
+        
+        activities = []
+        for log in recent_logs:
+            activities.append({
+                'description': log.description,
+                'user': log.username or 'System',
+                'timestamp': log.timestamp.strftime('%Y-%m-%d %H:%M'),
+                'status': 'SUCCESS' if log.success else 'FAILED'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'activities': activities
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting Entra activity: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to load Entra activity.'
+        }, status=500)
+
+
+@login_required
+@require_POST
+def entra_user_search(request):
+    """Search for Entra users"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Get search term from request
+        try:
+            data = json.loads(request.body)
+            search_term = data.get('search', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid request data.'
+            }, status=400)
+        
+        if len(search_term) < 3:
+            return JsonResponse({
+                'success': False,
+                'error': 'Search term must be at least 3 characters.'
+            }, status=400)
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Search for users
+        result = service.user_manager.search_users(search_term)
+        
+        if result['success']:
+            # Log the search
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='USER_SEARCH',
+                user=request.user,
+                description=f"Searched for Entra users: '{search_term}' - Found {len(result['users'])} users",
+                request=request,
+                severity='LOW',
+                success=True
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'users': result['users']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Search failed')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error searching Entra users: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to search users.'
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def entra_user_details(request, user_id):
+    """Get detailed information about an Entra user"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get user details including manager
+        result = service.user_manager.get_user_with_manager(user_id)
+        
+        if result['success']:
+            # Log the access
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='USER_VIEW',
+                user=request.user,
+                description=f"Viewed Entra user details: {result['user']['userPrincipalName']}",
+                request=request,
+                severity='LOW',
+                success=True
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'user': result['user']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to get user details')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error getting Entra user details: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get user details.'
+        }, status=500)
+
+
+@login_required
+@require_POST
+def entra_create_admin(request):
+    """Create an admin account based on existing user"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Get admin user data from request
+        try:
+            admin_data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid request data.'
+            }, status=400)
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Create the admin user
+        try:
+            result = service.user_manager.create_user(admin_data)
+        except Exception as e:
+            logger.error(f"Error in user_manager.create_user: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to create user: {str(e)}'
+            }, status=500)
+        
+        if result['success']:
+            # Log the creation
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='ADMIN_CREATE',
+                user=request.user,
+                description=f"Created admin account: {admin_data['userPrincipalName']} based on user {admin_data.get('sourceUserId', 'unknown')}",
+                request=request,
+                severity='HIGH',
+                success=True,
+                details={'target_user': admin_data['userPrincipalName'], 'source_user_id': admin_data.get('sourceUserId')}
+            )
+            
+            # Create integration task for tracking
+            from .models import IntegrationTask
+            import uuid
+            IntegrationTask.objects.create(
+                task_id=str(uuid.uuid4()),
+                integration_type='ENTRA',
+                task_type='USER_CREATE',
+                status='COMPLETED',
+                initiated_by=request.user,
+                target_resource=admin_data['userPrincipalName'],
+                task_parameters=admin_data,
+                result_data={'user_id': result.get('user_id'), 'upn': admin_data['userPrincipalName']},
+                started_at=timezone.now(),
+                completed_at=timezone.now()
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Admin account created successfully',
+                'user_id': result.get('user_id')
+            })
+        else:
+            # Log the failure
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='ADMIN_CREATE',
+                user=request.user,
+                description=f"Failed to create admin account: {admin_data['userPrincipalName']} - {result.get('error', 'Unknown error')}",
+                request=request,
+                severity='HIGH',
+                success=False
+            )
+            
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to create admin account')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error creating admin account: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to create admin account.'
+        }, status=500)
+
+
+@login_required
+def entra_user_roles(request, user_id):
+    """Get current role assignments for a user"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get user roles from Entra
+        try:
+            result = service.role_manager.get_user_role_assignments(user_id)
+        except Exception as e:
+            logger.error(f"Error getting user roles: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to get user roles: {str(e)}'
+            }, status=500)
+        
+        if result['success']:
+            return JsonResponse({
+                'success': True,
+                'roles': result['roles']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to get user roles')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error getting user roles: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get user roles.'
+        }, status=500)
+
+
+@login_required
+def entra_available_roles(request):
+    """Get available directory roles for assignment"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get available roles from Entra
+        try:
+            result = service.role_manager.get_directory_roles()
+        except Exception as e:
+            logger.error(f"Error getting directory roles: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to get directory roles: {str(e)}'
+            }, status=500)
+        
+        if result['success']:
+            return JsonResponse({
+                'success': True,
+                'roles': result['roles']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to get directory roles')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error getting directory roles: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get directory roles.'
+        }, status=500)
+
+
+@login_required
+def entra_assign_role(request):
+    """Assign a directory role to a user"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Get role assignment data from request
+        try:
+            assignment_data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid request data.'
+            }, status=400)
+        
+        required_fields = ['user_id', 'role_id', 'assignment_type', 'justification']
+        for field in required_fields:
+            if field not in assignment_data:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }, status=400)
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Assign the role
+        try:
+            result = service.role_manager.assign_role(
+                user_id=assignment_data['user_id'],
+                role_id=assignment_data['role_id'],
+                assignment_type=assignment_data['assignment_type'],
+                justification=assignment_data['justification'],
+                duration_hours=assignment_data.get('duration_hours'),
+                assigned_by=request.user
+            )
+        except Exception as e:
+            logger.error(f"Error assigning role: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to assign role: {str(e)}'
+            }, status=500)
+        
+        if result['success']:
+            # Log the assignment
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='ROLE_ASSIGN',
+                user=request.user,
+                description=f"Assigned role {assignment_data['role_id']} to user {assignment_data['user_id']} ({assignment_data['assignment_type']})",
+                request=request,
+                severity='HIGH',
+                success=True,
+                details=assignment_data
+            )
+            
+            # Create integration task for tracking
+            from .models import IntegrationTask
+            import uuid
+            IntegrationTask.objects.create(
+                task_id=str(uuid.uuid4()),
+                integration_type='ENTRA',
+                task_type='ROLE_ASSIGN',
+                status='COMPLETED',
+                initiated_by=request.user,
+                target_resource=f"{assignment_data['user_id']}:{assignment_data['role_id']}",
+                task_parameters=assignment_data,
+                result_data=result.get('assignment', {}),
+                started_at=timezone.now(),
+                completed_at=timezone.now()
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Role assigned successfully',
+                'assignment': result.get('assignment')
+            })
+        else:
+            # Log the failure
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='ROLE_ASSIGN',
+                user=request.user,
+                description=f"Failed to assign role {assignment_data['role_id']} to user {assignment_data['user_id']} - {result.get('error', 'Unknown error')}",
+                request=request,
+                severity='HIGH',
+                success=False,
+                details=assignment_data
+            )
+            
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to assign role')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error assigning role: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to assign role.'
+        }, status=500)
+
+
+@login_required
+def entra_remove_role(request):
+    """Remove a directory role from a user"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Get role removal data from request
+        try:
+            removal_data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid request data.'
+            }, status=400)
+        
+        required_fields = ['user_id', 'role_id']
+        for field in required_fields:
+            if field not in removal_data:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }, status=400)
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Remove the role
+        try:
+            result = service.role_manager.remove_role_assignment(
+                user_id=removal_data['user_id'],
+                role_id=removal_data['role_id'],
+                removed_by=request.user
+            )
+        except Exception as e:
+            logger.error(f"Error removing role: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to remove role: {str(e)}'
+            }, status=500)
+        
+        if result['success']:
+            # Log the removal
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='ROLE_REMOVE',
+                user=request.user,
+                description=f"Removed role {removal_data['role_id']} from user {removal_data['user_id']}",
+                request=request,
+                severity='HIGH',
+                success=True,
+                details=removal_data
+            )
+            
+            # Create integration task for tracking
+            from .models import IntegrationTask
+            import uuid
+            IntegrationTask.objects.create(
+                task_id=str(uuid.uuid4()),
+                integration_type='ENTRA',
+                task_type='ROLE_REMOVE',
+                status='COMPLETED',
+                initiated_by=request.user,
+                target_resource=f"{removal_data['user_id']}:{removal_data['role_id']}",
+                task_parameters=removal_data,
+                result_data=result.get('removal', {}),
+                started_at=timezone.now(),
+                completed_at=timezone.now()
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Role removed successfully'
+            })
+        else:
+            # Log the failure
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='ROLE_REMOVE',
+                user=request.user,
+                description=f"Failed to remove role {removal_data['role_id']} from user {removal_data['user_id']} - {result.get('error', 'Unknown error')}",
+                request=request,
+                severity='HIGH',
+                success=False,
+                details=removal_data
+            )
+            
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to remove role')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error removing role: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to remove role.'
+        }, status=500)
+
+
+@login_required
+def entra_role_members(request, role_id):
+    """Get members of a specific directory role"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get role members from Entra
+        try:
+            result = service.role_manager.get_role_members(role_id)
+        except Exception as e:
+            logger.error(f"Error getting role members: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to get role members: {str(e)}'
+            }, status=500)
+        
+        if result['success']:
+            return JsonResponse({
+                'success': True,
+                'members': result['members']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to get role members')
+            }, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error getting role members: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get role members.'
         }, status=500)

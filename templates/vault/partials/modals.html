@@ -12,7 +12,7 @@
                 </button>
             </div>
             
-            <form id="addEntryForm">
+            <form id="modalAddEntryForm">
                 <div class="form-group">
                     <label class="form-label">Entry Name</label>
                     <input type="text" name="name" class="form-input" placeholder="e.g., Gmail Account, SSH Server" required>
@@ -40,10 +40,10 @@
                     <div style="position: relative;">
                         <input type="password" name="password" class="form-input" placeholder="Enter password" required style="padding-right: 120px;">
                         <div style="position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%); display: flex; gap: var(--space-xs);">
-                            <button type="button" onclick="togglePasswordVisibility('addEntryForm')" style="background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: 4px;">
+                            <button type="button" onclick="togglePasswordVisibility('modalAddEntryForm')" style="background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: 4px;">
                                 <i class="ph ph-eye" id="passwordToggleIcon"></i>
                             </button>
-                            <button type="button" onclick="generatePassword('addEntryForm')" style="background: none; border: none; color: var(--amber-yellow); cursor: pointer; padding: 4px;">
+                            <button type="button" onclick="generatePassword('modalAddEntryForm')" style="background: none; border: none; color: var(--amber-yellow); cursor: pointer; padding: 4px;">
                                 <i class="ph ph-shuffle"></i>
                             </button>
                         </div>
@@ -429,6 +429,298 @@
     </div>
 </div>
 
+<!-- Entra User Lookup Modal -->
+<div id="entraUserLookupModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-md);">
+        <div class="card" style="width: 100%; max-width: 900px; margin: 0; max-height: 90vh; overflow-y: auto;">
+        <div class="modal-header">
+            <h2>
+                <i class="ph ph-magnifying-glass"></i>
+                Entra User Lookup
+            </h2>
+            <button type="button" class="modal-close" onclick="closeEntraUserLookupModal()">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        
+        <!-- Search Section -->
+        <div style="margin-bottom: var(--space-xl);">
+            <form id="entraUserSearchForm" onsubmit="searchEntraUser(event)">
+                <div style="display: flex; gap: var(--space-md); align-items: end;">
+                    <div class="form-group" style="flex: 1; margin: 0;">
+                        <label class="form-label">Search User</label>
+                        <input type="text" 
+                               id="entraUserSearchInput" 
+                               class="form-input" 
+                               placeholder="Enter name, email, or UPN..." 
+                               required
+                               minlength="3">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="ph ph-magnifying-glass"></i>
+                        Search
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Search Results -->
+        <div id="entraUserSearchResults" style="display: none;">
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                Search Results
+            </h3>
+            <div id="entraUserResultsList"></div>
+        </div>
+        
+        <!-- User Details Panel -->
+        <div id="entraUserDetailsPanel" style="display: none;">
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                User Details
+            </h3>
+            <div class="card" style="margin-bottom: var(--space-lg);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+                    <div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">Display Name</label>
+                            <div id="userDisplayName" style="font-size: 16px; font-weight: 600; color: var(--pure-white);"></div>
+                        </div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">First Name</label>
+                            <div id="userFirstName" style="font-size: 16px; color: var(--soft-grey);"></div>
+                        </div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">Last Name</label>
+                            <div id="userLastName" style="font-size: 16px; color: var(--soft-grey);"></div>
+                        </div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">User Principal Name</label>
+                            <div id="userUPN" style="font-size: 16px; color: var(--electric-blue);"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">Email</label>
+                            <div id="userEmail" style="font-size: 16px; color: var(--soft-grey);"></div>
+                        </div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">Department</label>
+                            <div id="userDepartment" style="font-size: 16px; color: var(--soft-grey);"></div>
+                        </div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">Job Title</label>
+                            <div id="userJobTitle" style="font-size: 16px; color: var(--soft-grey);"></div>
+                        </div>
+                        <div style="margin-bottom: var(--space-md);">
+                            <label style="font-size: 12px; color: var(--slate-muted); text-transform: uppercase; letter-spacing: 0.5px;">Manager</label>
+                            <div id="userManager" style="font-size: 16px; color: var(--soft-grey);"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--glass-border);">
+                    <button type="button" class="btn btn-primary" onclick="createAdminUser()">
+                        <i class="ph ph-user-plus"></i>
+                        Create Admin Account
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="viewUserRoles()">
+                        <i class="ph ph-crown"></i>
+                        View Roles
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="viewUserGroups()">
+                        <i class="ph ph-users"></i>
+                        View Groups
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Admin Creation Preview -->
+            <div id="adminCreationPreview" style="display: none;">
+                <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                    Admin Account Preview
+                </h3>
+                <div class="card" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 12px; color: var(--slate-muted);">Admin UPN</label>
+                        <div id="adminPreviewUPN" style="font-size: 16px; font-weight: 600; color: var(--emerald-green);"></div>
+                    </div>
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 12px; color: var(--slate-muted);">Admin Email</label>
+                        <div id="adminPreviewEmail" style="font-size: 16px; color: var(--emerald-green);"></div>
+                    </div>
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 12px; color: var(--slate-muted);">Job Title</label>
+                        <div id="adminPreviewJobTitle" style="font-size: 16px; color: var(--emerald-green);"></div>
+                    </div>
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 12px; color: var(--slate-muted);">Employee ID</label>
+                        <div id="adminPreviewEmployeeId" style="font-size: 16px; color: var(--emerald-green);"></div>
+                    </div>
+                    <div style="display: flex; gap: var(--space-md); margin-top: var(--space-lg);">
+                        <button type="button" class="btn btn-primary" onclick="confirmCreateAdmin()">
+                            <i class="ph ph-check"></i>
+                            Confirm & Create
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelAdminCreation()">
+                            <i class="ph ph-x"></i>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<!-- Entra Role Management Modal -->
+<div id="entraRoleManagementModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1001; backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-md);">
+        <div class="card" style="width: 100%; max-width: 1000px; margin: 0; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>
+                    <i class="ph ph-crown"></i>
+                    Role Management
+                </h2>
+                <button type="button" class="modal-close" onclick="closeEntraRoleManagementModal()">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <!-- User Info Header -->
+            <div id="roleManagementUserInfo" class="card" style="background: rgba(30, 41, 59, 0.3); margin-bottom: var(--space-lg);">
+                <div style="display: flex; align-items: center; gap: var(--space-md);">
+                    <i class="ph ph-user-circle" style="font-size: 48px; color: var(--electric-blue);"></i>
+                    <div>
+                        <h3 id="roleUserDisplayName" style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);"></h3>
+                        <div id="roleUserUPN" style="color: var(--electric-blue); font-size: 14px;"></div>
+                        <div id="roleUserJobTitle" style="color: var(--soft-grey); font-size: 14px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Current Roles Section -->
+            <div style="margin-bottom: var(--space-xl);">
+                <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                    <i class="ph ph-crown"></i>
+                    Current Roles
+                </h3>
+                <div id="currentRolesList" style="min-height: 100px;">
+                    <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                        <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                        <div>Loading current roles...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Available Roles Section -->
+            <div style="margin-bottom: var(--space-xl);">
+                <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                    <i class="ph ph-plus-circle"></i>
+                    Assign New Role
+                </h3>
+                
+                <!-- Role Search and Filter -->
+                <div style="margin-bottom: var(--space-md);">
+                    <!-- Search Bar -->
+                    <div class="form-group" style="margin: 0 0 var(--space-sm) 0; position: relative;">
+                        <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">
+                            <i class="ph ph-magnifying-glass"></i>
+                            Search Roles
+                        </label>
+                        <div style="position: relative;">
+                            <i class="ph ph-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--slate-muted);"></i>
+                            <input type="text" id="roleSearchInput" class="form-input" placeholder="Type to search role names and descriptions..." onkeyup="filterAvailableRoles()" style="padding-left: 40px; width: 100%;">
+                        </div>
+                    </div>
+                    
+                    <!-- Filter Dropdown -->
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">
+                            <i class="ph ph-funnel"></i>
+                            Filter by Type
+                        </label>
+                        <select id="roleTypeFilter" class="form-input" onchange="filterAvailableRoles()" style="width: 100%;">
+                            <option value="">All Role Types</option>
+                            <option value="admin">Administrative</option>
+                            <option value="security">Security</option>
+                            <option value="compliance">Compliance</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="availableRolesList" style="max-height: 400px; overflow-y: auto;">
+                    <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                        <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                        <div>Loading available roles...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Role Assignment Options -->
+            <div id="roleAssignmentOptions" style="display: none; margin-bottom: var(--space-lg);">
+                <h4 style="font-size: 16px; font-weight: 600; color: var(--pure-white); margin-bottom: var(--space-md);">
+                    Assignment Options
+                </h4>
+                <div class="card" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 14px; color: var(--slate-muted);">Selected Role</label>
+                        <div id="selectedRoleName" style="font-size: 16px; font-weight: 600; color: var(--emerald-green);"></div>
+                        <div id="selectedRoleDescription" style="font-size: 14px; color: var(--soft-grey); margin-top: 4px;"></div>
+                    </div>
+                    
+                    <!-- Assignment Type -->
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">Assignment Type</label>
+                        <div style="display: flex; gap: var(--space-md);">
+                            <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;">
+                                <input type="radio" name="assignmentType" value="permanent" checked onchange="onAssignmentTypeChange()" style="margin: 0;">
+                                <span style="font-size: 14px; color: var(--pure-white);">Permanent</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;">
+                                <input type="radio" name="assignmentType" value="eligible" onchange="onAssignmentTypeChange()" style="margin: 0;">
+                                <span style="font-size: 14px; color: var(--pure-white);">PIM Eligible</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Duration for Eligible Assignments -->
+                    <div id="eligibleDurationOptions" style="display: none; margin-bottom: var(--space-md);">
+                        <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">Eligibility Duration</label>
+                        <select id="eligibilityDuration" class="form-input">
+                            <option value="PT8H">8 Hours</option>
+                            <option value="P1D">1 Day</option>
+                            <option value="P7D" selected>7 Days</option>
+                            <option value="P30D">30 Days</option>
+                            <option value="P90D">90 Days</option>
+                            <option value="P365D">1 Year</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Justification -->
+                    <div style="margin-bottom: var(--space-md);">
+                        <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">Justification</label>
+                        <textarea id="assignmentJustification" class="form-input" rows="3" placeholder="Enter business justification for this role assignment..." required></textarea>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div style="display: flex; gap: var(--space-md);">
+                        <button type="button" class="btn btn-primary" onclick="assignRole()">
+                            <i class="ph ph-check"></i>
+                            Assign Role
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelRoleAssignment()">
+                            <i class="ph ph-x"></i>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 .integration-tab {
     padding: var(--space-sm) var(--space-md);
@@ -493,4 +785,161 @@
 .status-warning {
     background: var(--amber-yellow);
 }
+
+/* Entra User Lookup Modal styles */
+.user-search-result:hover {
+    background: rgba(14, 165, 233, 0.1);
+    border-color: var(--electric-blue);
+}
 </style>
+
+<!-- Role Management Modal -->
+<div id="roleManagementModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; backdrop-filter: blur(8px); overflow-y: auto;">
+    <div style="display: flex; align-items: flex-start; justify-content: center; min-height: 100vh; padding: var(--space-lg);">
+        <div class="card" style="width: 100%; max-width: 1200px; margin: var(--space-lg) 0; max-height: calc(100vh - 4rem); overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white);">
+                    <i class="ph ph-crown" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Role Management
+                </h3>
+                <button type="button" onclick="closeRoleManagementModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 24px; cursor: pointer; padding: var(--space-xs);">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+        
+        <!-- Role Selection Section -->
+        <div style="margin-bottom: var(--space-xl);">
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                <i class="ph ph-list"></i>
+                Select Role to Manage
+            </h3>
+            
+            <!-- Role Search -->
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <div style="position: relative;">
+                    <i class="ph ph-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--slate-muted);"></i>
+                    <input type="text" id="roleManagementSearchInput" class="form-input" placeholder="Search directory roles..." onkeyup="filterRolesForManagement()" style="padding-left: 40px;">
+                </div>
+            </div>
+            
+            <!-- Available Roles List -->
+            <div id="roleManagementRolesList" style="max-height: 300px; overflow-y: auto;">
+                <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                    <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                    <div>Loading roles...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Selected Role Details -->
+        <div id="selectedRoleDetails" style="display: none; margin-bottom: var(--space-xl);">
+            <div class="card" style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); margin-bottom: var(--space-lg);">
+                <div style="display: flex; align-items: center; gap: var(--space-md);">
+                    <i class="ph ph-crown" style="font-size: 48px; color: var(--electric-blue);"></i>
+                    <div>
+                        <h3 id="selectedRoleDisplayName" style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);"></h3>
+                        <div id="selectedRoleDescription" style="color: var(--soft-grey); font-size: 14px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Role Members Section -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+                <!-- Current Members -->
+                <div>
+                    <h4 style="font-size: 16px; font-weight: 600; color: var(--pure-white); margin-bottom: var(--space-md);">
+                        <i class="ph ph-users"></i>
+                        Current Members
+                        <span id="currentMembersCount" class="badge" style="background: var(--electric-blue); color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 8px;">0</span>
+                    </h4>
+                    <div id="currentMembersList" style="max-height: 400px; overflow-y: auto;">
+                        <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                            <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                            <div>Loading members...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Add New Member -->
+                <div>
+                    <h4 style="font-size: 16px; font-weight: 600; color: var(--pure-white); margin-bottom: var(--space-md);">
+                        <i class="ph ph-user-plus"></i>
+                        Add New Member
+                    </h4>
+                    
+                    <!-- User Search -->
+                    <div class="form-group" style="margin-bottom: var(--space-md);">
+                        <div style="position: relative;">
+                            <i class="ph ph-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--slate-muted);"></i>
+                            <input type="text" id="userSearchInput" class="form-input" placeholder="Search users to add..." onkeyup="searchUsersForRole()" style="padding-left: 40px;">
+                        </div>
+                    </div>
+                    
+                    <!-- User Search Results -->
+                    <div id="userSearchResults" style="display: none;">
+                        <div id="userSearchResultsList" style="max-height: 300px; overflow-y: auto;">
+                            <!-- Dynamic content -->
+                        </div>
+                    </div>
+                    
+                    <!-- Assignment Options -->
+                    <div id="userAssignmentOptions" style="display: none; margin-top: var(--space-md);">
+                        <div class="card" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
+                            <div style="margin-bottom: var(--space-md);">
+                                <div style="font-size: 14px; color: var(--slate-muted);">Selected User</div>
+                                <div id="selectedUserName" style="font-size: 16px; font-weight: 600; color: var(--emerald-green);"></div>
+                                <div id="selectedUserUPN" style="font-size: 14px; color: var(--soft-grey);"></div>
+                            </div>
+                            
+                            <!-- Assignment Type -->
+                            <div style="margin-bottom: var(--space-md);">
+                                <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">Assignment Type</label>
+                                <div style="display: flex; gap: var(--space-md);">
+                                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;">
+                                        <input type="radio" name="memberAssignmentType" value="permanent" checked onchange="onMemberAssignmentTypeChange()" style="margin: 0;">
+                                        <span style="font-size: 14px; color: var(--pure-white);">Permanent</span>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;">
+                                        <input type="radio" name="memberAssignmentType" value="eligible" onchange="onMemberAssignmentTypeChange()" style="margin: 0;">
+                                        <span style="font-size: 14px; color: var(--pure-white);">PIM Eligible</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Duration for Eligible Assignments -->
+                            <div id="memberEligibleDurationOptions" style="display: none; margin-bottom: var(--space-md);">
+                                <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">Eligibility Duration</label>
+                                <select id="memberEligibilityDuration" class="form-input">
+                                    <option value="PT8H">8 Hours</option>
+                                    <option value="P1D">1 Day</option>
+                                    <option value="P7D" selected>7 Days</option>
+                                    <option value="P30D">30 Days</option>
+                                    <option value="P90D">90 Days</option>
+                                    <option value="P365D">1 Year</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Justification -->
+                            <div style="margin-bottom: var(--space-md);">
+                                <label style="font-size: 14px; color: var(--slate-muted); margin-bottom: var(--space-xs); display: block;">Justification</label>
+                                <textarea id="memberAssignmentJustification" class="form-input" rows="3" placeholder="Enter business justification for this role assignment..." required></textarea>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div style="display: flex; gap: var(--space-md);">
+                                <button type="button" class="btn btn-primary" onclick="assignUserToRole()">
+                                    <i class="ph ph-check"></i>
+                                    Assign Role
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="cancelUserAssignment()">
+                                    <i class="ph ph-x"></i>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
