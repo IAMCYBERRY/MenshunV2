@@ -1004,6 +1004,9 @@
         </div>
     </div>
     {% endif %}
+    
+    <!-- Include all modals -->
+    {% include 'vault/partials/modals.html' %}
 {% endblock %}
 
 {% block extra_js %}
@@ -2172,7 +2175,12 @@
                 'X-CSRFToken': getCSRFToken(),
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 // Update statistics safely
@@ -2192,8 +2200,21 @@
             }
         })
         .catch(error => {
-            console.error('Error loading integration overview:', error);
-            // For now, just log the error since the endpoints don't exist yet
+            console.log('Integration overview API not implemented yet, using defaults');
+            // Set default values when API doesn't exist yet
+            const totalUsersEl = document.getElementById('totalIntegratedUsers');
+            const activeIntegrationsEl = document.getElementById('activeIntegrations');
+            const lastSyncEl = document.getElementById('lastSyncTime');
+            const pendingTasksEl = document.getElementById('pendingTasks');
+            
+            if (totalUsersEl) totalUsersEl.textContent = '0';
+            if (activeIntegrationsEl) activeIntegrationsEl.textContent = '0';
+            if (lastSyncEl) lastSyncEl.textContent = 'Never';
+            if (pendingTasksEl) pendingTasksEl.textContent = '0';
+            
+            // Set default status
+            updateIntegrationStatus('entra', { state: 'unknown' });
+            updateIntegrationStatus('proxmox', { state: 'unknown' });
         });
     }
     
