@@ -194,3 +194,303 @@
         </div>
     </div>
 </div>
+
+<!-- Integrations Modal -->
+<div id="integrationsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-md);">
+        <div class="card" style="width: 100%; max-width: 1200px; margin: 0; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white);">
+                    <i class="ph ph-globe" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    External Integrations
+                </h3>
+                <button type="button" onclick="closeIntegrationsModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 24px; cursor: pointer; padding: var(--space-xs);">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <!-- Integration Tabs -->
+            <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-lg); border-bottom: 1px solid var(--glass-border);">
+                <button type="button" onclick="showIntegrationTab('overview')" class="integration-tab active" data-tab="overview">
+                    <i class="ph ph-chart-bar"></i>
+                    Overview
+                </button>
+                <button type="button" onclick="showIntegrationTab('entra')" class="integration-tab" data-tab="entra">
+                    <i class="ph ph-microsoft-outlook-logo"></i>
+                    Microsoft Entra
+                </button>
+                <button type="button" onclick="showIntegrationTab('proxmox')" class="integration-tab" data-tab="proxmox">
+                    <i class="ph ph-server"></i>
+                    Proxmox VE
+                </button>
+                <button type="button" onclick="showIntegrationTab('settings')" class="integration-tab" data-tab="settings">
+                    <i class="ph ph-gear"></i>
+                    Settings
+                </button>
+            </div>
+            
+            <!-- Integration Content -->
+            <div id="integrationsContent">
+                <!-- Overview Tab -->
+                <div id="integrationOverview" class="integration-tab-content active">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
+                        <!-- Entra Integration Card -->
+                        <div class="card" style="position: relative;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md);">
+                                <div>
+                                    <h4 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                                        Microsoft Entra ID
+                                    </h4>
+                                    <p style="color: var(--soft-grey); font-size: 14px;">
+                                        Azure Active Directory integration for user management and authentication
+                                    </p>
+                                </div>
+                                <div class="status-indicator" id="entraStatus">
+                                    <span class="status-dot status-unknown"></span>
+                                    <span class="status-text">Not Configured</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: var(--space-sm);">
+                                <button type="button" onclick="showIntegrationTab('entra')" class="btn btn-primary" style="flex: 1;">
+                                    <i class="ph ph-gear"></i>
+                                    Configure
+                                </button>
+                                <button type="button" onclick="testEntraConnection()" class="btn btn-secondary">
+                                    <i class="ph ph-check-circle"></i>
+                                    Test
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Proxmox Integration Card -->
+                        <div class="card" style="position: relative;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md);">
+                                <div>
+                                    <h4 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                                        Proxmox VE
+                                    </h4>
+                                    <p style="color: var(--soft-grey); font-size: 14px;">
+                                        Proxmox Virtual Environment integration for user and permission management
+                                    </p>
+                                </div>
+                                <div class="status-indicator" id="proxmoxStatus">
+                                    <span class="status-dot status-unknown"></span>
+                                    <span class="status-text">Not Configured</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: var(--space-sm);">
+                                <button type="button" onclick="showIntegrationTab('proxmox')" class="btn btn-primary" style="flex: 1;">
+                                    <i class="ph ph-gear"></i>
+                                    Configure
+                                </button>
+                                <button type="button" onclick="testProxmoxConnection()" class="btn btn-secondary">
+                                    <i class="ph ph-check-circle"></i>
+                                    Test
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Integration Statistics -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+                        <div class="card">
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: 800; color: var(--electric-blue);" id="totalIntegratedUsers">0</div>
+                                <div style="font-size: 12px; color: var(--soft-grey); text-transform: uppercase; letter-spacing: 0.5px;">Integrated Users</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: 800; color: var(--emerald-green);" id="activeIntegrations">0</div>
+                                <div style="font-size: 12px; color: var(--soft-grey); text-transform: uppercase; letter-spacing: 0.5px;">Active Integrations</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: 800; color: var(--deep-purple);" id="lastSyncTime">Never</div>
+                                <div style="font-size: 12px; color: var(--soft-grey); text-transform: uppercase; letter-spacing: 0.5px;">Last Sync</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: 800; color: var(--amber-yellow);" id="pendingTasks">0</div>
+                                <div style="font-size: 12px; color: var(--soft-grey); text-transform: uppercase; letter-spacing: 0.5px;">Pending Tasks</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Entra Tab -->
+                <div id="integrationEntra" class="integration-tab-content">
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-xl);">
+                        <!-- Configuration -->
+                        <div>
+                            <h4 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                                <i class="ph ph-gear"></i>
+                                Configuration
+                            </h4>
+                            
+                            <form id="entraConfigForm">
+                                <div class="form-group">
+                                    <label class="form-label">Tenant ID</label>
+                                    <input type="text" name="tenant_id" class="form-input" placeholder="Your Azure AD Tenant ID">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Client ID (Application ID)</label>
+                                    <input type="text" name="client_id" class="form-input" placeholder="Application Client ID">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Client Secret</label>
+                                    <input type="password" name="client_secret" class="form-input" placeholder="Application Client Secret">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <input type="checkbox" name="auto_sync" style="margin-right: var(--space-xs);">
+                                        Enable automatic user synchronization
+                                    </label>
+                                </div>
+                                
+                                <div style="display: flex; gap: var(--space-sm);">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="ph ph-floppy-disk"></i>
+                                        Save Configuration
+                                    </button>
+                                    <button type="button" onclick="testEntraConnection()" class="btn btn-secondary">
+                                        <i class="ph ph-check-circle"></i>
+                                        Test Connection
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <!-- Operations -->
+                        <div>
+                            <h4 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                                <i class="ph ph-lightning"></i>
+                                Operations
+                            </h4>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-bottom: var(--space-lg);">
+                                <button type="button" onclick="openEntraUserLookup()" class="btn btn-secondary">
+                                    <i class="ph ph-magnifying-glass"></i>
+                                    User Lookup
+                                </button>
+                                <button type="button" onclick="openEntraUserCreate()" class="btn btn-secondary">
+                                    <i class="ph ph-user-plus"></i>
+                                    Create User
+                                </button>
+                                <button type="button" onclick="openEntraRoleAssignment()" class="btn btn-secondary">
+                                    <i class="ph ph-crown"></i>
+                                    Assign Roles
+                                </button>
+                                <button type="button" onclick="openEntraServicePrincipal()" class="btn btn-secondary">
+                                    <i class="ph ph-robot"></i>
+                                    Service Principals
+                                </button>
+                            </div>
+                            
+                            <!-- Recent Entra Activity -->
+                            <div class="card" style="background: rgba(30, 41, 59, 0.3);">
+                                <h5 style="font-size: 16px; font-weight: 600; color: var(--pure-white); margin-bottom: var(--space-md);">
+                                    Recent Activity
+                                </h5>
+                                <div id="entraActivityList">
+                                    <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                                        No recent activity
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Proxmox Tab -->
+                <div id="integrationProxmox" class="integration-tab-content">
+                    <div style="text-align: center; color: var(--slate-muted); padding: var(--space-2xl);">
+                        <i class="ph ph-server" style="font-size: 64px; margin-bottom: var(--space-md);"></i>
+                        <h4>Proxmox Integration</h4>
+                        <p>Coming Soon</p>
+                    </div>
+                </div>
+                
+                <!-- Settings Tab -->
+                <div id="integrationSettings" class="integration-tab-content">
+                    <div style="text-align: center; color: var(--slate-muted); padding: var(--space-2xl);">
+                        <i class="ph ph-gear" style="font-size: 64px; margin-bottom: var(--space-md);"></i>
+                        <h4>Integration Settings</h4>
+                        <p>Global integration configuration options coming soon</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.integration-tab {
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    color: var(--slate-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-weight: 500;
+}
+
+.integration-tab:hover {
+    color: var(--pure-white);
+    background: rgba(14, 165, 233, 0.1);
+}
+
+.integration-tab.active {
+    color: var(--electric-blue);
+    background: rgba(14, 165, 233, 0.2);
+    border-bottom: 2px solid var(--electric-blue);
+}
+
+.integration-tab-content {
+    display: none;
+}
+
+.integration-tab-content.active {
+    display: block;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-unknown {
+    background: var(--slate-muted);
+}
+
+.status-connected {
+    background: var(--emerald-green);
+}
+
+.status-error {
+    background: var(--crimson-red);
+}
+
+.status-warning {
+    background: var(--amber-yellow);
+}
+</style>

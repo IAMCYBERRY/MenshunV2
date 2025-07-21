@@ -299,6 +299,10 @@
                         <i class="ph ph-tag"></i>
                         Credential Types
                     </button>
+                    <button type="button" class="btn btn-secondary" onclick="openIntegrationsModal()">
+                        <i class="ph ph-globe"></i>
+                        Integrations
+                    </button>
                 </div>
             </div>
             {% endif %}
@@ -2089,6 +2093,7 @@
         openUserManagementModal: typeof window.openUserManagementModal,
         openAuditLogsModal: typeof window.openAuditLogsModal,
         openCredentialTypesModal: typeof window.openCredentialTypesModal,
+        openIntegrationsModal: typeof window.openIntegrationsModal,
         openAddEntryModal: typeof window.openAddEntryModal
     });
     
@@ -2097,6 +2102,186 @@
         alert('JavaScript is working! ✅');
         console.log('✅ JavaScript test successful');
     };
+    
+    // ===============================
+    // Integrations Modal Functions
+    // ===============================
+    
+    function openIntegrationsModal() {
+        document.getElementById('integrationsModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadIntegrationOverview();
+    }
+    
+    function closeIntegrationsModal() {
+        document.getElementById('integrationsModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+    
+    function showIntegrationTab(tabName) {
+        // Hide all tab contents
+        document.querySelectorAll('.integration-tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        // Remove active from all tabs
+        document.querySelectorAll('.integration-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Show selected tab content
+        const selectedContent = document.getElementById(`integration${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+        if (selectedContent) {
+            selectedContent.classList.add('active');
+        }
+        
+        // Activate selected tab
+        const selectedTab = document.querySelector(`.integration-tab[data-tab="${tabName}"]`);
+        if (selectedTab) {
+            selectedTab.classList.add('active');
+        }
+        
+        // Load tab-specific content
+        switch(tabName) {
+            case 'overview':
+                loadIntegrationOverview();
+                break;
+            case 'entra':
+                loadEntraConfiguration();
+                break;
+            case 'proxmox':
+                // Load Proxmox content when implemented
+                break;
+            case 'settings':
+                // Load settings when implemented
+                break;
+        }
+    }
+    
+    function loadIntegrationOverview() {
+        // Load integration statistics
+        fetch('/ajax/integration-overview/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update statistics
+                document.getElementById('totalIntegratedUsers').textContent = data.stats.total_users || 0;
+                document.getElementById('activeIntegrations').textContent = data.stats.active_integrations || 0;
+                document.getElementById('lastSyncTime').textContent = data.stats.last_sync || 'Never';
+                document.getElementById('pendingTasks').textContent = data.stats.pending_tasks || 0;
+                
+                // Update status indicators
+                updateIntegrationStatus('entra', data.status.entra);
+                updateIntegrationStatus('proxmox', data.status.proxmox);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading integration overview:', error);
+        });
+    }
+    
+    function updateIntegrationStatus(integration, status) {
+        const statusElement = document.getElementById(`${integration}Status`);
+        if (!statusElement) return;
+        
+        const dotElement = statusElement.querySelector('.status-dot');
+        const textElement = statusElement.querySelector('.status-text');
+        
+        if (dotElement && textElement) {
+            // Remove existing status classes
+            dotElement.classList.remove('status-unknown', 'status-connected', 'status-error', 'status-warning');
+            
+            // Add new status class and text
+            switch(status.state) {
+                case 'connected':
+                    dotElement.classList.add('status-connected');
+                    textElement.textContent = 'Connected';
+                    break;
+                case 'error':
+                    dotElement.classList.add('status-error');
+                    textElement.textContent = 'Error';
+                    break;
+                case 'warning':
+                    dotElement.classList.add('status-warning');
+                    textElement.textContent = 'Warning';
+                    break;
+                default:
+                    dotElement.classList.add('status-unknown');
+                    textElement.textContent = 'Not Configured';
+            }
+        }
+    }
+    
+    function testEntraConnection() {
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        
+        button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Testing...';
+        button.disabled = true;
+        
+        fetch('/ajax/entra-test/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Entra connection test successful!', 'success');
+                updateIntegrationStatus('entra', { state: 'connected' });
+            } else {
+                showNotification(data.error || 'Connection test failed', 'error');
+                updateIntegrationStatus('entra', { state: 'error' });
+            }
+        })
+        .catch(error => {
+            console.error('Error testing Entra connection:', error);
+            showNotification('An unexpected error occurred', 'error');
+            updateIntegrationStatus('entra', { state: 'error' });
+        })
+        .finally(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    function testProxmoxConnection() {
+        showNotification('Proxmox integration coming soon!', 'info');
+    }
+    
+    // Entra operation functions (stubs for now)
+    function openEntraUserLookup() {
+        showNotification('Entra user lookup feature coming soon!', 'info');
+    }
+    
+    function openEntraUserCreate() {
+        showNotification('Entra user creation feature coming soon!', 'info');
+    }
+    
+    function openEntraRoleAssignment() {
+        showNotification('Entra role assignment feature coming soon!', 'info');
+    }
+    
+    function openEntraServicePrincipal() {
+        showNotification('Entra service principal management coming soon!', 'info');
+    }
+    
+    // Make integrations functions globally available
+    window.openIntegrationsModal = openIntegrationsModal;
+    window.closeIntegrationsModal = closeIntegrationsModal;
+    window.showIntegrationTab = showIntegrationTab;
+    window.testEntraConnection = testEntraConnection;
+    window.testProxmoxConnection = testProxmoxConnection;
+    window.openEntraUserLookup = openEntraUserLookup;
+    window.openEntraUserCreate = openEntraUserCreate;
+    window.openEntraRoleAssignment = openEntraRoleAssignment;
+    window.openEntraServicePrincipal = openEntraServicePrincipal;
     
     function closeAdminOverviewModal() {
         document.getElementById('adminOverviewModal').style.display = 'none';
@@ -2380,6 +2565,9 @@
                     break;
                 case 'credential_types':
                     setTimeout(() => openCredentialTypesModal(), 100);
+                    break;
+                case 'integrations':
+                    setTimeout(() => openIntegrationsModal(), 100);
                     break;
             }
             // Remove the modal parameter from URL without reloading
