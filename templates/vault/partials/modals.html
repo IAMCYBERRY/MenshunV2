@@ -1,0 +1,196 @@
+<!-- Add Entry Modal -->
+<div id="addEntryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-md);">
+        <div class="card" style="width: 100%; max-width: 600px; margin: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white);">
+                    <i class="ph ph-plus-circle" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Add New Entry
+                </h3>
+                <button type="button" onclick="closeAddEntryModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 24px; cursor: pointer; padding: var(--space-xs);">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="addEntryForm">
+                <div class="form-group">
+                    <label class="form-label">Entry Name</label>
+                    <input type="text" name="name" class="form-input" placeholder="e.g., Gmail Account, SSH Server" required>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-input" placeholder="Username or email">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Credential Type</label>
+                        <select name="credential_type" class="form-input" required>
+                            <option value="">Select Type</option>
+                            {% for cred_type in credential_types %}
+                                <option value="{{ cred_type.id }}">{{ cred_type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div style="position: relative;">
+                        <input type="password" name="password" class="form-input" placeholder="Enter password" required style="padding-right: 120px;">
+                        <div style="position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%); display: flex; gap: var(--space-xs);">
+                            <button type="button" onclick="togglePasswordVisibility('addEntryForm')" style="background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: 4px;">
+                                <i class="ph ph-eye" id="passwordToggleIcon"></i>
+                            </button>
+                            <button type="button" onclick="generatePassword('addEntryForm')" style="background: none; border: none; color: var(--amber-yellow); cursor: pointer; padding: 4px;">
+                                <i class="ph ph-shuffle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">URL (Optional)</label>
+                    <input type="url" name="url" class="form-input" placeholder="https://example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Notes (Optional)</label>
+                    <textarea name="notes" class="form-input" rows="3" placeholder="Additional notes or instructions..."></textarea>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-xl);">
+                    <button type="button" onclick="closeAddEntryModal()" class="btn btn-secondary">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="ph ph-plus"></i>
+                        Add Entry
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Entry Modal -->
+<div id="editEntryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-md);">
+        <div class="card" style="width: 100%; max-width: 600px; margin: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white);">
+                    <i class="ph ph-pencil" style="color: var(--amber-yellow); margin-right: var(--space-xs);"></i>
+                    Edit Entry
+                </h3>
+                <button type="button" onclick="closeEditEntryModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 24px; cursor: pointer; padding: var(--space-xs);">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="editEntryForm">
+                <input type="hidden" name="entry_id" id="editEntryId">
+                
+                <div class="form-group">
+                    <label class="form-label">Entry Name</label>
+                    <input type="text" name="name" id="editEntryName" class="form-input" required>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" id="editEntryUsername" class="form-input">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Credential Type</label>
+                        <select name="credential_type" id="editEntryCredentialType" class="form-input" required>
+                            {% for cred_type in credential_types %}
+                                <option value="{{ cred_type.id }}">{{ cred_type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div style="position: relative;">
+                        <input type="password" name="password" id="editEntryPassword" class="form-input" style="padding-right: 120px;">
+                        <div style="position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%); display: flex; gap: var(--space-xs);">
+                            <button type="button" onclick="togglePasswordVisibility('editEntryForm')" style="background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: 4px;">
+                                <i class="ph ph-eye"></i>
+                            </button>
+                            <button type="button" onclick="generatePassword('editEntryForm')" style="background: none; border: none; color: var(--amber-yellow); cursor: pointer; padding: 4px;">
+                                <i class="ph ph-shuffle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">URL (Optional)</label>
+                    <input type="url" name="url" id="editEntryUrl" class="form-input">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Notes (Optional)</label>
+                    <textarea name="notes" id="editEntryNotes" class="form-input" rows="3"></textarea>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-xl);">
+                    <button type="button" onclick="closeEditEntryModal()" class="btn btn-secondary">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="ph ph-floppy-disk"></i>
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Password Modal -->
+<div id="viewPasswordModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-md);">
+        <div class="card" style="width: 100%; max-width: 500px; margin: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white);">
+                    <i class="ph ph-eye" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    View Password
+                </h3>
+                <button type="button" onclick="closeViewPasswordModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 24px; cursor: pointer; padding: var(--space-xs);">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <div style="margin-bottom: var(--space-lg);">
+                <div style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-sm);" id="passwordEntryName">
+                    Entry Name
+                </div>
+                <div style="background: var(--slate-secondary); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); padding: var(--space-md); position: relative;">
+                    <div style="font-family: 'Courier New', monospace; font-size: 18px; color: var(--pure-white); word-break: break-all; line-height: 1.5;" id="passwordDisplay">
+                        ••••••••••••
+                    </div>
+                    <button type="button" onclick="copyPassword()" style="position: absolute; top: var(--space-sm); right: var(--space-sm); background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: var(--space-xs);">
+                        <i class="ph ph-copy" id="copyIcon"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: var(--space-md); justify-content: center;">
+                <button type="button" onclick="togglePasswordInModal()" class="btn btn-secondary">
+                    <i class="ph ph-eye" id="modalToggleIcon"></i>
+                    <span id="modalToggleText">Show</span>
+                </button>
+                <button type="button" onclick="copyPassword()" class="btn btn-primary">
+                    <i class="ph ph-copy"></i>
+                    Copy Password
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

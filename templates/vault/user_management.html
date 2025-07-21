@@ -1,0 +1,40 @@
+{% extends 'menshun_base.html' %}
+
+{% block title %}User Management - Menshun PAM{% endblock %}
+{% block page_title %}User Management{% endblock %}
+{% block page_subtitle %}Manage users, roles, and access permissions{% endblock %}
+
+{% block header_actions %}
+    <button type="button" class="btn btn-primary">
+        <i class="ph ph-user-plus"></i>
+        Add User
+    </button>
+    <button type="button" class="btn btn-secondary">
+        <i class="ph ph-download"></i>
+        Export Users
+    </button>
+{% endblock %}
+
+{% block content %}
+    <div class="card" style="text-align: center; padding: var(--space-2xl);">
+        <div style="margin-bottom: var(--space-xl);">
+            <i class="ph ph-users-three" style="font-size: 80px; color: var(--electric-blue);"></i>
+        </div>
+        <h3 style="font-size: 28px; font-weight: 800; color: var(--pure-white); margin-bottom: var(--space-md);">
+            User Management Interface
+        </h3>
+        <p style="color: var(--soft-grey); margin-bottom: var(--space-xl); font-size: 16px; max-width: 600px; margin-left: auto; margin-right: auto;">
+            This advanced user management interface will be implemented in the next phase. For now, you can manage users through the Django Admin Console.
+        </p>
+        <div style="display: flex; gap: var(--space-md); justify-content: center;">
+            <a href="/admin/vault/customuser/" class="btn btn-primary" target="_blank">
+                <i class="ph ph-gear-six"></i>
+                Open User Admin
+            </a>
+            <a href="{% url 'vault:dashboard' %}" class="btn btn-secondary">
+                <i class="ph ph-arrow-left"></i>
+                Back to Dashboard
+            </a>
+        </div>
+    </div>
+{% endblock %}

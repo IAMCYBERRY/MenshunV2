@@ -1,0 +1,40 @@
+{% extends 'menshun_base.html' %}
+
+{% block title %}Audit Logs - Menshun PAM{% endblock %}
+{% block page_title %}Audit Logs{% endblock %}
+{% block page_subtitle %}Security monitoring and access tracking{% endblock %}
+
+{% block header_actions %}
+    <button type="button" class="btn btn-primary">
+        <i class="ph ph-funnel"></i>
+        Advanced Filters
+    </button>
+    <button type="button" class="btn btn-secondary">
+        <i class="ph ph-download"></i>
+        Export Logs
+    </button>
+{% endblock %}
+
+{% block content %}
+    <div class="card" style="text-align: center; padding: var(--space-2xl);">
+        <div style="margin-bottom: var(--space-xl);">
+            <i class="ph ph-list-checks" style="font-size: 80px; color: var(--deep-purple);"></i>
+        </div>
+        <h3 style="font-size: 28px; font-weight: 800; color: var(--pure-white); margin-bottom: var(--space-md);">
+            Advanced Audit Logging
+        </h3>
+        <p style="color: var(--soft-grey); margin-bottom: var(--space-xl); font-size: 16px; max-width: 600px; margin-left: auto; margin-right: auto;">
+            Comprehensive audit logging with advanced filtering and analytics will be available in the next release. Basic access logs are currently available in the admin console.
+        </p>
+        <div style="display: flex; gap: var(--space-md); justify-content: center;">
+            <a href="/admin/vault/vaultaccesslog/" class="btn btn-primary" target="_blank">
+                <i class="ph ph-list-checks"></i>
+                View Access Logs
+            </a>
+            <a href="{% url 'vault:dashboard' %}" class="btn btn-secondary">
+                <i class="ph ph-arrow-left"></i>
+                Back to Dashboard
+            </a>
+        </div>
+    </div>
+{% endblock %}

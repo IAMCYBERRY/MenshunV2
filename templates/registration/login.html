@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Menshun PAM</title>
+    
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <style>
+        :root {
+            /* Primary Colors */
+            --deep-slate: #0f172a;
+            --electric-blue: #0ea5e9;
+            --pure-white: #ffffff;
+            --soft-grey: #cbd5e1;
+            
+            /* Status Colors */
+            --emerald-green: #10b981;
+            --amber-yellow: #f59e0b;
+            --crimson-red: #ef4444;
+            --deep-purple: #7c3aed;
+            
+            /* Component Colors */
+            --dark-slate-sidebar: #1e293b;
+            --slate-secondary: #334155;
+            --slate-tertiary: #475569;
+            --slate-muted: #94a3b8;
+            
+            /* Glass-morphism Variables */
+            --glass-bg: rgba(30, 41, 59, 0.6);
+            --glass-border: rgba(71, 85, 105, 0.3);
+            --glass-blur: 8px;
+            
+            /* Spacing System */
+            --space-xs: 8px;
+            --space-sm: 16px;
+            --space-md: 24px;
+            --space-lg: 32px;
+            --space-xl: 48px;
+            --space-2xl: 64px;
+            
+            /* Border Radius */
+            --radius-sm: 6px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            
+            /* Shadows */
+            --shadow-glow: 0 0 20px rgba(14, 165, 233, 0.15);
+            --shadow-intense: 0 0 30px rgba(14, 165, 233, 0.25);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--deep-slate);
+            color: var(--pure-white);
+            min-height: 100vh;
+            line-height: 1.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Cyberpunk Grid Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 75% 75%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+                linear-gradient(45deg, transparent 49%, rgba(14, 165, 233, 0.05) 50%, transparent 51%);
+            background-size: 200px 200px, 300px 300px, 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+            animation: gridMove 20s ease-in-out infinite;
+        }
+        
+        @keyframes gridMove {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(20px, 20px); }
+        }
+        
+        /* Login Container */
+        .login-container {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            padding: var(--space-2xl);
+            width: 100%;
+            max-width: 450px;
+            box-shadow: var(--shadow-glow);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--electric-blue), var(--deep-purple));
+            animation: shimmer 2s ease-in-out infinite;
+        }
+        
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        
+        /* Logo Section */
+        .logo-section {
+            text-align: center;
+            margin-bottom: var(--space-2xl);
+        }
+        
+        .logo-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto var(--space-md);
+            background: linear-gradient(135deg, var(--electric-blue), var(--deep-purple));
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-glow);
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .logo-icon i {
+            font-size: 40px;
+            color: var(--pure-white);
+        }
+        
+        .logo-title {
+            font-size: 32px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--pure-white), var(--electric-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: var(--space-xs);
+        }
+        
+        .logo-subtitle {
+            font-size: 14px;
+            color: var(--soft-grey);
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        /* Form Styles */
+        .login-form {
+            margin-bottom: var(--space-lg);
+        }
+        
+        .form-group {
+            margin-bottom: var(--space-md);
+            position: relative;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--pure-white);
+            margin-bottom: var(--space-xs);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 16px 20px;
+            background: var(--slate-secondary);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            color: var(--pure-white);
+            font-family: inherit;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--electric-blue);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+            background: rgba(51, 65, 85, 0.8);
+        }
+        
+        .form-input::placeholder {
+            color: var(--slate-muted);
+        }
+        
+        /* Button */
+        .btn-login {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, var(--electric-blue), #0284c7);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: var(--pure-white);
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-login::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
+        }
+        
+        .btn-login:hover::before {
+            left: 100%;
+        }
+        
+        .btn-login:active {
+            transform: translateY(0);
+        }
+        
+        /* Error Messages */
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: var(--radius-sm);
+            padding: var(--space-md);
+            margin-bottom: var(--space-md);
+            color: var(--crimson-red);
+            font-size: 14px;
+        }
+        
+        /* Footer */
+        .login-footer {
+            text-align: center;
+            color: var(--slate-muted);
+            font-size: 12px;
+        }
+        
+        .login-footer a {
+            color: var(--electric-blue);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        
+        .login-footer a:hover {
+            color: var(--pure-white);
+        }
+        
+        /* Test Users Info */
+        .test-users {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-sm);
+            padding: var(--space-md);
+            margin-top: var(--space-lg);
+        }
+        
+        .test-users h4 {
+            color: var(--deep-purple);
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: var(--space-sm);
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+        }
+        
+        .test-user-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-xs);
+            font-size: 12px;
+        }
+        
+        .test-user {
+            padding: var(--space-xs);
+            background: rgba(124, 58, 237, 0.1);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .test-user:hover {
+            background: rgba(124, 58, 237, 0.2);
+        }
+        
+        .test-user strong {
+            color: var(--deep-purple);
+        }
+        
+        /* Responsive */
+        @media (max-width: 500px) {
+            .login-container {
+                margin: var(--space-md);
+                padding: var(--space-lg);
+            }
+            
+            .logo-title {
+                font-size: 28px;
+            }
+            
+            .test-user-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <!-- Logo Section -->
+        <div class="logo-section">
+            <div class="logo-icon">
+                <i class="ph ph-shield-star"></i>
+            </div>
+            <h1 class="logo-title">Menshun</h1>
+            <p class="logo-subtitle">PAM System</p>
+        </div>
+        
+        <!-- Error Messages -->
+        {% if form.errors %}
+            <div class="error-message">
+                <i class="ph ph-warning-circle" style="margin-right: var(--space-xs);"></i>
+                {% for field, errors in form.errors.items %}
+                    {% for error in errors %}
+                        {{ error }}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        {% if form.non_field_errors %}
+            <div class="error-message">
+                <i class="ph ph-warning-circle" style="margin-right: var(--space-xs);"></i>
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+        
+        <!-- Login Form -->
+        <form method="post" class="login-form">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label for="{{ form.username.id_for_label }}" class="form-label">
+                    <i class="ph ph-user" style="margin-right: var(--space-xs);"></i>
+                    Username
+                </label>
+                <input type="text" 
+                       name="{{ form.username.name }}" 
+                       id="{{ form.username.id_for_label }}"
+                       class="form-input"
+                       placeholder="Enter your username"
+                       required
+                       autocomplete="username">
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.password.id_for_label }}" class="form-label">
+                    <i class="ph ph-lock" style="margin-right: var(--space-xs);"></i>
+                    Password
+                </label>
+                <input type="password" 
+                       name="{{ form.password.name }}" 
+                       id="{{ form.password.id_for_label }}"
+                       class="form-input"
+                       placeholder="Enter your password"
+                       required
+                       autocomplete="current-password">
+            </div>
+            
+            <input type="hidden" name="next" value="{{ next }}">
+            
+            <button type="submit" class="btn-login">
+                <i class="ph ph-sign-in" style="margin-right: var(--space-xs);"></i>
+                Access Vault
+            </button>
+        </form>
+        
+        <!-- Test Users Info -->
+        <div class="test-users">
+            <h4>
+                <i class="ph ph-test-tube"></i>
+                Development Users
+            </h4>
+            <div class="test-user-grid">
+                <div class="test-user" onclick="fillCredentials('admin', 'admin123')">
+                    <strong>admin</strong> / admin123<br>
+                    <span style="color: var(--slate-muted);">Superuser</span>
+                </div>
+                <div class="test-user" onclick="fillCredentials('vault_admin', 'admin123')">
+                    <strong>vault_admin</strong> / admin123<br>
+                    <span style="color: var(--slate-muted);">Vault Admin</span>
+                </div>
+                <div class="test-user" onclick="fillCredentials('vault_editor', 'editor123')">
+                    <strong>vault_editor</strong> / editor123<br>
+                    <span style="color: var(--slate-muted);">Vault Editor</span>
+                </div>
+                <div class="test-user" onclick="fillCredentials('vault_viewer', 'viewer123')">
+                    <strong>vault_viewer</strong> / viewer123<br>
+                    <span style="color: var(--slate-muted);">Vault Viewer</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="login-footer">
+            <p>&copy; 2025 Menshun PAM. All rights reserved.</p>
+        </div>
+    </div>
+    
+    <script>
+        function fillCredentials(username, password) {
+            document.querySelector('input[name="username"]').value = username;
+            document.querySelector('input[name="password"]').value = password;
+            
+            // Add visual feedback
+            const testUser = event.target.closest('.test-user');
+            testUser.style.background = 'rgba(14, 165, 233, 0.2)';
+            setTimeout(() => {
+                testUser.style.background = 'rgba(124, 58, 237, 0.1)';
+            }, 200);
+        }
+        
+        // Add loading state to login button
+        document.querySelector('.login-form').addEventListener('submit', function() {
+            const button = this.querySelector('.btn-login');
+            button.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite; margin-right: var(--space-xs);"></i>Authenticating...';
+            button.disabled = true;
+        });
+        
+        // Spinner animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Focus first input on load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('input[name="username"]').focus();
+        });
+    </script>
+</body>
+</html>

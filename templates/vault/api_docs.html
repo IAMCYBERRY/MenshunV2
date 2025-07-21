@@ -1,0 +1,169 @@
+{% extends 'menshun_base.html' %}
+
+{% block title %}API Documentation - Menshun PAM{% endblock %}
+{% block page_title %}API Documentation{% endblock %}
+{% block page_subtitle %}Complete REST API reference and integration guide{% endblock %}
+
+{% block header_actions %}
+    <a href="/api/" class="btn btn-primary" target="_blank">
+        <i class="ph ph-browser"></i>
+        API Browser
+    </a>
+    <button type="button" class="btn btn-secondary">
+        <i class="ph ph-download"></i>
+        Download OpenAPI
+    </button>
+{% endblock %}
+
+{% block content %}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xl);">
+        <!-- Quick Start -->
+        <div class="card">
+            <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">
+                <i class="ph ph-rocket-launch" style="color: var(--electric-blue);"></i>
+                Quick Start
+            </h3>
+            
+            <div style="margin-bottom: var(--space-lg);">
+                <h4 style="color: var(--amber-yellow); margin-bottom: var(--space-sm);">1. Authentication</h4>
+                <div style="background: var(--slate-secondary); border-radius: var(--radius-sm); padding: var(--space-sm); font-family: monospace; font-size: 13px; color: var(--pure-white); overflow-x: auto;">
+POST /auth/login/<br>
+{<br>
+&nbsp;&nbsp;"username": "your_username",<br>
+&nbsp;&nbsp;"password": "your_password"<br>
+}
+                </div>
+            </div>
+            
+            <div style="margin-bottom: var(--space-lg);">
+                <h4 style="color: var(--amber-yellow); margin-bottom: var(--space-sm);">2. Use Access Token</h4>
+                <div style="background: var(--slate-secondary); border-radius: var(--radius-sm); padding: var(--space-sm); font-family: monospace; font-size: 13px; color: var(--pure-white); overflow-x: auto;">
+Authorization: Bearer &lt;access_token&gt;
+                </div>
+            </div>
+            
+            <div>
+                <h4 style="color: var(--amber-yellow); margin-bottom: var(--space-sm);">3. Make API Calls</h4>
+                <div style="background: var(--slate-secondary); border-radius: var(--radius-sm); padding: var(--space-sm); font-family: monospace; font-size: 13px; color: var(--pure-white); overflow-x: auto;">
+GET /api/vault-entries/
+                </div>
+            </div>
+        </div>
+        
+        <!-- Endpoints Overview -->
+        <div class="card">
+            <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">
+                <i class="ph ph-list" style="color: var(--emerald-green);"></i>
+                Main Endpoints
+            </h3>
+            
+            <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                <div style="padding: var(--space-sm); background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.2); border-radius: var(--radius-sm);">
+                    <div style="font-family: monospace; font-size: 13px; color: var(--electric-blue); font-weight: 600;">
+                        GET /api/vault-entries/
+                    </div>
+                    <div style="font-size: 12px; color: var(--soft-grey);">List all vault entries</div>
+                </div>
+                
+                <div style="padding: var(--space-sm); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-sm);">
+                    <div style="font-family: monospace; font-size: 13px; color: var(--emerald-green); font-weight: 600;">
+                        POST /api/vault-entries/
+                    </div>
+                    <div style="font-size: 12px; color: var(--soft-grey);">Create new vault entry</div>
+                </div>
+                
+                <div style="padding: var(--space-sm); background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: var(--radius-sm);">
+                    <div style="font-family: monospace; font-size: 13px; color: var(--amber-yellow); font-weight: 600;">
+                        PUT /api/vault-entries/{id}/
+                    </div>
+                    <div style="font-size: 12px; color: var(--soft-grey);">Update vault entry</div>
+                </div>
+                
+                <div style="padding: var(--space-sm); background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius-sm);">
+                    <div style="font-family: monospace; font-size: 13px; color: var(--crimson-red); font-weight: 600;">
+                        DELETE /api/vault-entries/{id}/
+                    </div>
+                    <div style="font-size: 12px; color: var(--soft-grey);">Delete vault entry</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Interactive API Browser -->
+    <div class="card" style="margin-top: var(--space-xl);">
+        <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">
+            <i class="ph ph-browser" style="color: var(--deep-purple);"></i>
+            Interactive API Browser
+        </h3>
+        
+        <p style="color: var(--soft-grey); margin-bottom: var(--space-lg);">
+            Explore and test all API endpoints with our interactive browser interface. No additional setup required - authenticate once and start testing immediately.
+        </p>
+        
+        <div style="text-align: center;">
+            <a href="/api/" class="btn btn-primary" target="_blank" style="font-size: 16px; padding: 16px 32px;">
+                <i class="ph ph-play-circle"></i>
+                Launch API Browser
+            </a>
+        </div>
+    </div>
+    
+    <!-- SDK and Integration Examples -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xl); margin-top: var(--space-xl);">
+        <div class="card">
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                Python SDK Example
+            </h3>
+            <div style="background: var(--slate-secondary); border-radius: var(--radius-sm); padding: var(--space-md); font-family: monospace; font-size: 12px; color: var(--pure-white); overflow-x: auto;">
+import requests<br><br>
+# Authenticate<br>
+response = requests.post(<br>
+&nbsp;&nbsp;"http://localhost:8001/auth/login/",<br>
+&nbsp;&nbsp;json={<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"username": "admin",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"password": "admin123"<br>
+&nbsp;&nbsp;}<br>
+)<br>
+token = response.json()["access"]<br><br>
+# Get vault entries<br>
+headers = {<br>
+&nbsp;&nbsp;"Authorization": f"Bearer {token}"<br>
+}<br>
+entries = requests.get(<br>
+&nbsp;&nbsp;"http://localhost:8001/api/vault-entries/",<br>
+&nbsp;&nbsp;headers=headers<br>
+).json()
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md);">
+                JavaScript Example
+            </h3>
+            <div style="background: var(--slate-secondary); border-radius: var(--radius-sm); padding: var(--space-md); font-family: monospace; font-size: 12px; color: var(--pure-white); overflow-x: auto;">
+// Authenticate<br>
+const authResponse = await fetch(<br>
+&nbsp;&nbsp;"/auth/login/", {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;method: "POST",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;headers: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Content-Type": "application/json"<br>
+&nbsp;&nbsp;&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;&nbsp;&nbsp;body: JSON.stringify({<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;username: "admin",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;password: "admin123"<br>
+&nbsp;&nbsp;&nbsp;&nbsp;})<br>
+&nbsp;&nbsp;}<br>
+);<br><br>
+const { access } = await authResponse.json();<br><br>
+// Get vault entries<br>
+const entries = await fetch(<br>
+&nbsp;&nbsp;"/api/vault-entries/", {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;headers: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Authorization": `Bearer ${access}`<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+).then(r => r.json());
+            </div>
+        </div>
+    </div>
+{% endblock %}

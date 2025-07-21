@@ -1,0 +1,460 @@
+{% extends 'menshun_base.html' %}
+
+{% block title %}Vault Entries - Menshun PAM{% endblock %}
+{% block page_title %}Vault Management{% endblock %}
+{% block page_subtitle %}Secure credential storage and access control{% endblock %}
+
+{% block header_actions %}
+    {% if can_edit %}
+        <button type="button" class="btn btn-primary" onclick="openAddEntryModal()">
+            <i class="ph ph-plus-circle"></i>
+            Add Entry
+        </button>
+    {% endif %}
+    <button type="button" class="btn btn-secondary" onclick="exportEntries()">
+        <i class="ph ph-download"></i>
+        Export
+    </button>
+{% endblock %}
+
+{% block content %}
+    <!-- Advanced Search and Filters -->
+    <div class="card" style="margin-bottom: var(--space-xl);">
+        <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">
+            <i class="ph ph-funnel" style="color: var(--electric-blue);"></i>
+            Advanced Filters
+        </h3>
+        
+        <form method="GET" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: var(--space-md); align-items: end;">
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label">Search Entries</label>
+                <input type="text" name="search" class="form-input" value="{{ search }}" placeholder="Search by name, username, or notes...">
+            </div>
+            
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label">Credential Type</label>
+                <select name="credential_type" class="form-input">
+                    <option value="">All Types</option>
+                    {% for cred_type in credential_types %}
+                        <option value="{{ cred_type.name }}" {% if selected_credential_type == cred_type.name %}selected{% endif %}>
+                            {{ cred_type.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label">Sort By</label>
+                <select name="sort" class="form-input">
+                    <option value="-updated_at">Recently Updated</option>
+                    <option value="name">Name A-Z</option>
+                    <option value="-name">Name Z-A</option>
+                    <option value="-created_at">Recently Created</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: var(--space-xs);">
+                <button type="submit" class="btn btn-primary">
+                    <i class="ph ph-magnifying-glass"></i>
+                    Filter
+                </button>
+                <a href="{% url 'vault:vault_entries' %}" class="btn btn-secondary">
+                    <i class="ph ph-x"></i>
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Results Summary -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+        <div style="color: var(--soft-grey);">
+            {% if search or selected_credential_type %}
+                Showing {{ page_obj.paginator.count }} filtered result{{ page_obj.paginator.count|pluralize }} of {{ total_entries }} total entries
+            {% else %}
+                Showing {{ page_obj.paginator.count }} vault entr{{ page_obj.paginator.count|pluralize:"y,ies" }}
+            {% endif %}
+        </div>
+        
+        {% if can_edit %}
+            <button class="btn btn-primary" onclick="openAddEntryModal()">
+                <i class="ph ph-plus"></i>
+                Quick Add
+            </button>
+        {% endif %}
+    </div>
+    
+    <!-- Vault Entries Grid -->
+    {% if page_obj %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: var(--space-md);">
+            {% for entry in page_obj %}
+                <div class="card" style="position: relative;">
+                    <!-- Entry Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md);">
+                        <div style="flex: 1;">
+                            <h4 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                                {{ entry.name }}
+                            </h4>
+                            <div style="display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-sm);">
+                                <i class="ph ph-user" style="color: var(--electric-blue); font-size: 16px;"></i>
+                                <span style="color: var(--soft-grey); font-size: 15px; font-weight: 500;">{{ entry.username }}</span>
+                            </div>
+                        </div>
+                        <div style="padding: 8px 14px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 8px; font-size: 12px; font-weight: 700; color: var(--electric-blue); text-transform: uppercase; letter-spacing: 0.8px;">
+                            {{ entry.credential_type.name }}
+                        </div>
+                    </div>
+                    
+                    <!-- Entry Details -->
+                    <div style="margin-bottom: var(--space-md);">
+                        {% if entry.url %}
+                            <div style="display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-sm);">
+                                <i class="ph ph-link" style="color: var(--amber-yellow); font-size: 16px;"></i>
+                                <a href="{{ entry.url }}" target="_blank" style="color: var(--amber-yellow); text-decoration: none; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                                    {{ entry.url|truncatechars:45 }}
+                                </a>
+                                <i class="ph ph-arrow-square-out" style="color: var(--amber-yellow); font-size: 14px; opacity: 0.7;"></i>
+                            </div>
+                        {% endif %}
+                        
+                        {% if entry.notes %}
+                            <div style="background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm); padding: var(--space-sm); margin-bottom: var(--space-sm);">
+                                <div style="color: var(--slate-muted); font-size: 14px; line-height: 1.5;">
+                                    {{ entry.notes|truncatechars:120 }}
+                                </div>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Access Statistics -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); margin-bottom: var(--space-md);">
+                            <div style="text-align: center; padding: var(--space-sm); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-sm);">
+                                <div style="font-size: 20px; font-weight: 800; color: var(--emerald-green);">{{ entry.access_count }}</div>
+                                <div style="font-size: 11px; color: var(--emerald-green); text-transform: uppercase; letter-spacing: 0.5px;">Accesses</div>
+                            </div>
+                            <div style="text-align: center; padding: var(--space-sm); background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: var(--radius-sm);">
+                                <div style="font-size: 12px; font-weight: 700; color: var(--deep-purple);">
+                                    {% if entry.last_accessed %}
+                                        {{ entry.last_accessed|timesince }} ago
+                                    {% else %}
+                                        Never
+                                    {% endif %}
+                                </div>
+                                <div style="font-size: 11px; color: var(--deep-purple); text-transform: uppercase; letter-spacing: 0.5px;">Last Access</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Entry Actions -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: var(--space-md); border-top: 1px solid var(--glass-border);">
+                        <div style="font-size: 12px; color: var(--slate-muted);">
+                            <i class="ph ph-clock" style="margin-right: 4px;"></i>
+                            Updated {{ entry.updated_at|timesince }} ago
+                        </div>
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <button type="button" class="btn btn-secondary" 
+                                    onclick="viewPassword({{ entry.id }}, '{{ entry.name|escapejs }}')"
+                                    style="font-size: 12px; padding: 10px 14px;">
+                                <i class="ph ph-eye"></i>
+                                View
+                            </button>
+                            {% if can_edit %}
+                                <button type="button" class="btn btn-secondary" 
+                                        onclick="editEntry({{ entry.id }})"
+                                        style="font-size: 12px; padding: 10px 14px;">
+                                    <i class="ph ph-pencil"></i>
+                                    Edit
+                                </button>
+                                {% if user.is_superuser or 'Vault Admin' in user_groups.all %}
+                                    <button type="button" class="btn btn-danger" 
+                                            onclick="deleteEntry({{ entry.id }}, '{{ entry.name|escapejs }}')"
+                                            style="font-size: 12px; padding: 10px 14px;">
+                                        <i class="ph ph-trash"></i>
+                                        Delete
+                                    </button>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+            <div style="margin-top: var(--space-2xl); display: flex; justify-content: center;">
+                <div style="display: flex; gap: var(--space-xs); align-items: center;">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1{% if search %}&search={{ search }}{% endif %}{% if selected_credential_type %}&credential_type={{ selected_credential_type }}{% endif %}" class="btn btn-secondary" style="padding: 10px 14px;">
+                            <i class="ph ph-caret-double-left"></i>
+                        </a>
+                        <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if selected_credential_type %}&credential_type={{ selected_credential_type }}{% endif %}" class="btn btn-secondary" style="padding: 10px 14px;">
+                            <i class="ph ph-caret-left"></i>
+                            Previous
+                        </a>
+                    {% endif %}
+                    
+                    <div style="padding: 10px 20px; color: var(--soft-grey); font-size: 14px; font-weight: 600; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-sm);">
+                        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                    </div>
+                    
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if selected_credential_type %}&credential_type={{ selected_credential_type }}{% endif %}" class="btn btn-secondary" style="padding: 10px 14px;">
+                            Next
+                            <i class="ph ph-caret-right"></i>
+                        </a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if selected_credential_type %}&credential_type={{ selected_credential_type }}{% endif %}" class="btn btn-secondary" style="padding: 10px 14px;">
+                            <i class="ph ph-caret-double-right"></i>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    {% else %}
+        <!-- Empty State -->
+        <div class="card" style="text-align: center; padding: var(--space-2xl);">
+            <div style="margin-bottom: var(--space-xl);">
+                <i class="ph ph-vault" style="font-size: 80px; color: var(--slate-tertiary);"></i>
+            </div>
+            <h3 style="font-size: 28px; font-weight: 800; color: var(--pure-white); margin-bottom: var(--space-md);">
+                {% if search or selected_credential_type %}
+                    No Matching Entries Found
+                {% else %}
+                    Vault is Empty
+                {% endif %}
+            </h3>
+            <p style="color: var(--soft-grey); margin-bottom: var(--space-xl); font-size: 16px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                {% if search or selected_credential_type %}
+                    Try adjusting your search criteria or clear the filters to see all entries.
+                {% else %}
+                    {% if can_edit %}
+                        Start building your secure credential vault by adding your first entry.
+                    {% else %}
+                        Contact your administrator to add vault entries to your account.
+                    {% endif %}
+                {% endif %}
+            </p>
+            <div style="display: flex; gap: var(--space-md); justify-content: center;">
+                {% if search or selected_credential_type %}
+                    <a href="{% url 'vault:vault_entries' %}" class="btn btn-secondary">
+                        <i class="ph ph-funnel-x"></i>
+                        Clear Filters
+                    </a>
+                {% endif %}
+                {% if can_edit %}
+                    <button class="btn btn-primary" onclick="openAddEntryModal()">
+                        <i class="ph ph-plus-circle"></i>
+                        Add First Entry
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Modals (reuse from dashboard) -->
+    {% include 'vault/partials/modals.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Reuse all the JavaScript functionality from the dashboard
+    {% include 'vault/partials/vault_scripts.js' %}
+    
+    // Additional functionality specific to vault entries page
+    function deleteEntry(entryId, entryName) {
+        if (confirm(`Are you sure you want to delete "${entryName}"? This action cannot be undone.`)) {
+            // Send delete request
+            fetch(`/ajax/vault-entry/${entryId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken(),
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    // Refresh the page to remove the deleted entry
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showNotification(data.error || 'Failed to delete vault entry', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('An unexpected error occurred', 'error');
+            });
+        }
+    }
+    
+    function exportEntries() {
+        alert('Export functionality would be implemented here');
+    }
+    
+    // Admin Modal Functions
+    function openAdminOverviewModal() {
+        document.getElementById('adminOverviewModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadAdminOverview();
+    }
+
+    function openUserManagementModal() {
+        document.getElementById('userManagementModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadUsers();
+    }
+
+    function openAuditLogsModal() {
+        document.getElementById('auditLogsModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadAuditLogs();
+    }
+
+    function openCredentialTypesModal() {
+        document.getElementById('credentialTypesModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadCredentialTypes();
+    }
+
+    function closeAdminOverviewModal() {
+        document.getElementById('adminOverviewModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function closeUserManagementModal() {
+        document.getElementById('userManagementModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function closeAuditLogsModal() {
+        document.getElementById('auditLogsModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function closeCredentialTypesModal() {
+        document.getElementById('credentialTypesModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    // Load functions (simplified versions for vault page)
+    function loadAdminOverview() {
+        fetch('/ajax/admin-overview/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('adminOverviewContent').innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+                        ${data.stats.map(stat => `
+                            <div class="card">
+                                <h4>${stat.label}</h4>
+                                <p style="font-size: 24px; font-weight: 700; color: var(--electric-blue);">${stat.value}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => console.error('Error loading admin overview:', error));
+    }
+
+    function loadUsers() {
+        fetch('/ajax/users/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const usersHtml = data.users.map(user => `
+                    <tr>
+                        <td>${user.username}</td>
+                        <td>${user.email}</td>
+                        <td>${user.is_active ? 'Active' : 'Inactive'}</td>
+                        <td>${user.last_login || 'Never'}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('usersTableBody').innerHTML = usersHtml;
+            }
+        })
+        .catch(error => console.error('Error loading users:', error));
+    }
+
+    function loadAuditLogs() {
+        fetch('/ajax/audit-logs/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Audit logs response:', data);  // Debug log
+            if (data.success) {
+                const logsHtml = data.logs.map(log => `
+                    <tr>
+                        <td style="font-size: 12px;">${log.timestamp}</td>
+                        <td><span class="badge badge-${log.category.toLowerCase()}">${log.category}</span></td>
+                        <td>${log.action}</td>
+                        <td>${log.user || log.username || 'System'}</td>
+                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${log.description}</td>
+                        <td><span class="badge badge-${log.severity.toLowerCase()}">${log.severity}</span></td>
+                    </tr>
+                `).join('');
+                document.getElementById('auditLogsTableBody').innerHTML = logsHtml;
+            }
+        })
+        .catch(error => console.error('Error loading audit logs:', error));
+    }
+
+    function loadCredentialTypes() {
+        fetch('/ajax/credential-types/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const typesHtml = data.credential_types.map(type => `
+                    <tr>
+                        <td>${type.name}</td>
+                        <td>${type.description || 'No description'}</td>
+                        <td>${type.usage_count || 0}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('credentialTypesTableBody').innerHTML = typesHtml;
+            }
+        })
+        .catch(error => console.error('Error loading credential types:', error));
+    }
+
+    // Handle URL parameters for modal opening
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const modalParam = urlParams.get('modal');
+        if (modalParam) {
+            switch(modalParam) {
+                case 'admin_overview':
+                    setTimeout(() => openAdminOverviewModal(), 100);
+                    break;
+                case 'user_management':
+                    setTimeout(() => openUserManagementModal(), 100);
+                    break;
+                case 'audit_logs':
+                    setTimeout(() => openAuditLogsModal(), 100);
+                    break;
+                case 'credential_types':
+                    setTimeout(() => openCredentialTypesModal(), 100);
+                    break;
+            }
+        }
+    });
+</script>
+{% endblock %}

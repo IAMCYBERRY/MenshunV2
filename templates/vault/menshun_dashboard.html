@@ -1,0 +1,2403 @@
+{% extends 'menshun_base.html' %}
+
+{% block title %}Dashboard - Menshun PAM{% endblock %}
+{% block page_title %}Command Center{% endblock %}
+{% block page_subtitle %}Unified access to your privileged credentials and administrative functions{% endblock %}
+
+{% block header_actions %}
+    {% if can_edit %}
+        <button type="button" class="btn btn-primary" onclick="openAddEntryModal()">
+            <i class="ph ph-plus-circle"></i>
+            Add Entry
+        </button>
+    {% endif %}
+    <button type="button" class="btn btn-secondary" onclick="refreshDashboard()">
+        <i class="ph ph-arrows-clockwise"></i>
+        Refresh
+    </button>
+{% endblock %}
+
+{% block content %}
+    <!-- Statistics Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
+        <!-- Total Entries Card -->
+        <div class="card glow-pulse">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="color: var(--soft-grey); font-size: 14px; font-weight: 600; margin-bottom: var(--space-xs);">
+                        VAULT ENTRIES
+                    </div>
+                    <div style="font-size: 32px; font-weight: 800; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                        {{ total_entries }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--emerald-green); display: flex; align-items: center; gap: 4px;">
+                        <i class="ph ph-trend-up"></i>
+                        Active & Accessible
+                    </div>
+                </div>
+                <div style="width: 60px; height: 60px; background: linear-gradient(135deg, var(--electric-blue), #0284c7); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="ph ph-key" style="font-size: 24px; color: var(--pure-white);"></i>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Credential Types Card -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="color: var(--soft-grey); font-size: 14px; font-weight: 600; margin-bottom: var(--space-xs);">
+                        CREDENTIAL TYPES
+                    </div>
+                    <div style="font-size: 32px; font-weight: 800; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                        {{ credential_types|length }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--amber-yellow); display: flex; align-items: center; gap: 4px;">
+                        <i class="ph ph-tag"></i>
+                        Categories Available
+                    </div>
+                </div>
+                <div style="width: 60px; height: 60px; background: linear-gradient(135deg, var(--amber-yellow), #d97706); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="ph ph-folders" style="font-size: 24px; color: var(--pure-white);"></i>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Access Level Card -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="color: var(--soft-grey); font-size: 14px; font-weight: 600; margin-bottom: var(--space-xs);">
+                        ACCESS LEVEL
+                    </div>
+                    <div style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                        {% if user.is_superuser %}SUPERUSER{% elif can_edit %}READ/WRITE{% else %}READ ONLY{% endif %}
+                    </div>
+                    <div style="font-size: 12px; color: {% if user.is_superuser %}var(--crimson-red){% elif can_edit %}var(--emerald-green){% else %}var(--soft-grey){% endif %}; display: flex; align-items: center; gap: 4px;">
+                        <i class="ph ph-{% if user.is_superuser %}crown{% elif can_edit %}check-circle{% else %}eye{% endif %}"></i>
+                        {% if user.is_superuser %}Full System Control{% elif can_edit %}Create & Modify{% else %}View Only{% endif %}
+                    </div>
+                </div>
+                <div style="width: 60px; height: 60px; background: linear-gradient(135deg, {% if user.is_superuser %}var(--crimson-red), #dc2626{% elif can_edit %}var(--emerald-green), #059669{% else %}var(--slate-tertiary), var(--slate-secondary){% endif %}); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="ph ph-{% if user.is_superuser %}shield-star{% elif can_edit %}shield-check{% else %}shield{% endif %}" style="font-size: 24px; color: var(--pure-white);"></i>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity Card -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="color: var(--soft-grey); font-size: 14px; font-weight: 600; margin-bottom: var(--space-xs);">
+                        RECENT ACTIVITY
+                    </div>
+                    <div style="font-size: 32px; font-weight: 800; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                        {{ recent_activity|length }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--deep-purple); display: flex; align-items: center; gap: 4px;">
+                        <i class="ph ph-clock-countdown"></i>
+                        Recent Actions
+                    </div>
+                </div>
+                <div style="width: 60px; height: 60px; background: linear-gradient(135deg, var(--deep-purple), #6d28d9); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="ph ph-activity" style="font-size: 24px; color: var(--pure-white);"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Dashboard Content -->
+    <div style="display: grid; grid-template-columns: 1fr 350px; gap: var(--space-xl);">
+        <!-- Left Column: Vault Entries -->
+        <div>
+            <!-- Quick Actions Bar -->
+            <div class="card" style="margin-bottom: var(--space-lg); padding: var(--space-md);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+                    <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                        <i class="ph ph-key" style="margin-right: var(--space-xs); color: var(--electric-blue);"></i>
+                        Vault Entries
+                    </h3>
+                    <div style="display: flex; gap: var(--space-sm);">
+                        {% if can_edit %}
+                            <button class="btn btn-primary" onclick="openAddEntryModal()" style="font-size: 12px; padding: 8px 16px;">
+                                <i class="ph ph-plus"></i>
+                                Add Entry
+                            </button>
+                        {% endif %}
+                        <button class="btn btn-secondary" onclick="exportEntries()" style="font-size: 12px; padding: 8px 16px;">
+                            <i class="ph ph-download"></i>
+                            Export
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search and Filters -->
+                <div style="display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-sm);">
+                    <div class="form-group" style="margin: 0;">
+                        <input type="text" class="form-input" id="searchInput" placeholder="Search vault entries..." style="padding: 10px 16px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <select class="form-input" id="typeFilter" style="padding: 10px 16px; width: 180px;">
+                            <option value="">All Types</option>
+                            {% for cred_type in credential_types %}
+                                <option value="{{ cred_type.name }}">{{ cred_type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <select class="form-input" id="sortFilter" style="padding: 10px 16px; width: 160px;">
+                            <option value="-updated_at">Recently Updated</option>
+                            <option value="name">Name A-Z</option>
+                            <option value="-name">Name Z-A</option>
+                            <option value="-created_at">Recently Created</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Vault Entries Grid -->
+            {% if page_obj %}
+                <div id="vaultEntries" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: var(--space-md);">
+                    {% for entry in page_obj %}
+                        <div class="card vault-entry" 
+                             data-name="{{ entry.name|lower }}" 
+                             data-type="{{ entry.credential_type.name }}"
+                             data-updated="{{ entry.updated_at|date:'c' }}"
+                             style="position: relative;">
+                            
+                            <!-- Entry Header -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md);">
+                                <div style="flex: 1;">
+                                    <h4 style="font-size: 16px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-xs);">
+                                        {{ entry.name }}
+                                    </h4>
+                                    <div style="display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs);">
+                                        <i class="ph ph-user" style="color: var(--electric-blue); font-size: 14px;"></i>
+                                        <span style="color: var(--soft-grey); font-size: 14px;">{{ entry.username }}</span>
+                                    </div>
+                                </div>
+                                <div style="padding: 6px 12px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--electric-blue); text-transform: uppercase; letter-spacing: 0.5px;">
+                                    {{ entry.credential_type.name }}
+                                </div>
+                            </div>
+                            
+                            <!-- Entry Details -->
+                            {% if entry.url %}
+                                <div style="display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs);">
+                                    <i class="ph ph-link" style="color: var(--amber-yellow); font-size: 14px;"></i>
+                                    <a href="{{ entry.url }}" target="_blank" style="color: var(--amber-yellow); text-decoration: none; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        {{ entry.url|truncatechars:35 }}
+                                    </a>
+                                </div>
+                            {% endif %}
+                            
+                            {% if entry.notes %}
+                                <div style="color: var(--slate-muted); font-size: 13px; margin-bottom: var(--space-md); line-height: 1.5;">
+                                    {{ entry.notes|truncatechars:80 }}
+                                </div>
+                            {% endif %}
+                            
+                            <!-- Entry Actions -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: var(--space-md); border-top: 1px solid var(--glass-border);">
+                                <div style="font-size: 12px; color: var(--slate-muted);">
+                                    Updated {{ entry.updated_at|timesince }} ago
+                                </div>
+                                <div style="display: flex; gap: var(--space-xs);">
+                                    <button type="button" class="btn btn-secondary" 
+                                            onclick="viewPassword({{ entry.id }}, '{{ entry.name|escapejs }}')"
+                                            style="font-size: 12px; padding: 8px 12px;">
+                                        <i class="ph ph-eye"></i>
+                                        View
+                                    </button>
+                                    {% if can_edit %}
+                                        <button type="button" class="btn btn-secondary" 
+                                                onclick="editEntry({{ entry.id }})"
+                                                style="font-size: 12px; padding: 8px 12px;">
+                                            <i class="ph ph-pencil"></i>
+                                            Edit
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Pagination -->
+                {% if page_obj.has_other_pages %}
+                    <div style="margin-top: var(--space-xl); display: flex; justify-content: center;">
+                        <div style="display: flex; gap: var(--space-xs); align-items: center;">
+                            {% if page_obj.has_previous %}
+                                <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary" style="padding: 8px 12px;">
+                                    <i class="ph ph-caret-left"></i>
+                                    Previous
+                                </a>
+                            {% endif %}
+                            
+                            <div style="padding: 8px 16px; color: var(--soft-grey); font-size: 14px;">
+                                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                            </div>
+                            
+                            {% if page_obj.has_next %}
+                                <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary" style="padding: 8px 12px;">
+                                    Next
+                                    <i class="ph ph-caret-right"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% else %}
+                <!-- Empty State -->
+                <div class="card" style="text-align: center; padding: var(--space-2xl);">
+                    <div style="margin-bottom: var(--space-lg);">
+                        <i class="ph ph-key" style="font-size: 64px; color: var(--slate-tertiary);"></i>
+                    </div>
+                    <h3 style="font-size: 24px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-sm);">
+                        No Vault Entries Found
+                    </h3>
+                    <p style="color: var(--soft-grey); margin-bottom: var(--space-lg);">
+                        {% if can_edit %}
+                            Add your first vault entry to get started with secure credential management.
+                        {% else %}
+                            Contact your administrator to add vault entries to your account.
+                        {% endif %}
+                    </p>
+                    {% if can_edit %}
+                        <button class="btn btn-primary" onclick="openAddEntryModal()">
+                            <i class="ph ph-plus-circle"></i>
+                            Add Your First Entry
+                        </button>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Right Column: Activity & Quick Access -->
+        <div>
+            <!-- Admin Console Access -->
+            {% if user.is_staff or user.is_superuser %}
+            <div class="card" style="margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">
+                    <i class="ph ph-crown" style="color: var(--crimson-red);"></i>
+                    Admin Console
+                </h3>
+                
+                <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                    <button type="button" class="btn btn-primary" onclick="openAdminOverviewModal()">
+                        <i class="ph ph-gauge"></i>
+                        Admin Overview
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="openUserManagementModal()">
+                        <i class="ph ph-users"></i>
+                        User Management
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="openAuditLogsModal()">
+                        <i class="ph ph-list-checks"></i>
+                        Audit Logs
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="openCredentialTypesModal()">
+                        <i class="ph ph-tag"></i>
+                        Credential Types
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Recent Activity -->
+            <div class="card">
+                <h3 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">
+                    <i class="ph ph-activity" style="color: var(--deep-purple);"></i>
+                    Recent Activity
+                </h3>
+                
+                {% if recent_activity %}
+                    <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                        {% for log in recent_activity %}
+                            <div style="padding: var(--space-sm); background: rgba(30, 41, 59, 0.4); border: 1px solid var(--glass-border); border-radius: var(--radius-sm);">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-xs);">
+                                    <div style="font-size: 14px; font-weight: 600; color: var(--pure-white);">
+                                        {{ log.vault_entry.name }}
+                                    </div>
+                                    <div style="font-size: 11px; color: var(--slate-muted);">
+                                        {{ log.timestamp|timesince }} ago
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                                    <span style="padding: 2px 8px; background: rgba(124, 58, 237, 0.2); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 4px; font-size: 10px; font-weight: 600; color: var(--deep-purple); text-transform: uppercase;">
+                                        {{ log.access_type }}
+                                    </span>
+                                    {% if log.ip_address %}
+                                        <span style="font-size: 11px; color: var(--slate-muted);">
+                                            from {{ log.ip_address }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div style="text-align: center; padding: var(--space-lg); color: var(--slate-muted);">
+                        <i class="ph ph-clock" style="font-size: 32px; margin-bottom: var(--space-sm); display: block;"></i>
+                        No recent activity
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Entry Modal -->
+    {% if can_edit %}
+    <div id="addEntryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-plus-circle" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Add Vault Entry
+                </h3>
+                <button onclick="closeAddEntryModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="addEntryForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Entry Name *</label>
+                    <input type="text" class="form-input" id="entryName" required placeholder="e.g., Production Database">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Username *</label>
+                    <input type="text" class="form-input" id="entryUsername" required placeholder="e.g., admin">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password *</label>
+                    <input type="password" class="form-input" id="entryPassword" required placeholder="Enter secure password">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Credential Type *</label>
+                    <select class="form-input" id="entryType" required>
+                        <option value="">Select credential type...</option>
+                        {% for cred_type in credential_types %}
+                            <option value="{{ cred_type.id }}">{{ cred_type.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">URL (Optional)</label>
+                    <input type="url" class="form-input" id="entryUrl" placeholder="https://example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Notes (Optional)</label>
+                    <textarea class="form-input" id="entryNotes" rows="3" placeholder="Additional information..."></textarea>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-lg);">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="ph ph-floppy-disk"></i>
+                        Create Entry
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddEntryModal()">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- User Management Modal -->
+    {% if user.is_staff or user.is_superuser %}
+    <div id="userManagementModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 95%; max-width: 1200px; max-height: 95vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-users" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    User Management
+                </h3>
+                <div style="display: flex; gap: var(--space-sm);">
+                    <button type="button" class="btn btn-primary" onclick="openAddUserModal()">
+                        <i class="ph ph-user-plus"></i>
+                        Add User
+                    </button>
+                    <button onclick="closeUserManagementModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Users Table -->
+            <div id="usersTableContainer">
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--slate-muted);">
+                    <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                    <div style="margin-top: var(--space-sm);">Loading users...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add User Modal -->
+    <div id="addUserModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1100; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-user-plus" style="color: var(--emerald-green); margin-right: var(--space-xs);"></i>
+                    Add New User
+                </h3>
+                <button onclick="closeAddUserModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="addUserForm">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Username *</label>
+                        <input type="text" name="username" class="form-input" required placeholder="e.g., jdoe">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Email *</label>
+                        <input type="email" name="email" class="form-input" required placeholder="e.g., john@example.com">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">First Name</label>
+                        <input type="text" name="first_name" class="form-input" placeholder="e.g., John">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" name="last_name" class="form-input" placeholder="e.g., Doe">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password *</label>
+                    <div style="position: relative;">
+                        <input type="password" name="password" class="form-input" required placeholder="Enter secure password" style="padding-right: 50px;">
+                        <button type="button" onclick="togglePasswordVisibility('addUserForm')" style="position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: 4px;">
+                            <i class="ph ph-eye" id="addUserPasswordToggle"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">User Groups</label>
+                    <div id="userGroupsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-xs);">
+                        <!-- Groups will be loaded dynamically -->
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; padding: var(--space-sm); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                        <input type="checkbox" name="is_active" checked style="accent-color: var(--electric-blue);">
+                        <span style="color: var(--pure-white); font-weight: 500;">Active User</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; padding: var(--space-sm); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                        <input type="checkbox" name="is_staff" style="accent-color: var(--amber-yellow);">
+                        <span style="color: var(--pure-white); font-weight: 500;">Staff User</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; padding: var(--space-sm); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                        <input type="checkbox" name="is_superuser" style="accent-color: var(--crimson-red);">
+                        <span style="color: var(--pure-white); font-weight: 500;">Superuser</span>
+                    </label>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="ph ph-user-plus"></i>
+                        Create User
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddUserModal()">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit User Modal -->
+    <div id="editUserModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1100; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-pencil" style="color: var(--amber-yellow); margin-right: var(--space-xs);"></i>
+                    Edit User
+                </h3>
+                <button onclick="closeEditUserModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="editUserForm">
+                <input type="hidden" name="user_id" id="editUserId">
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" id="editUserUsername" class="form-input" readonly style="background: var(--slate-tertiary); opacity: 0.7;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" id="editUserEmail" class="form-input" required>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">First Name</label>
+                        <input type="text" name="first_name" id="editUserFirstName" class="form-input">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" name="last_name" id="editUserLastName" class="form-input">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">New Password (leave blank to keep current)</label>
+                    <div style="position: relative;">
+                        <input type="password" name="password" class="form-input" placeholder="Enter new password (optional)" style="padding-right: 50px;">
+                        <button type="button" onclick="togglePasswordVisibility('editUserForm')" style="position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--electric-blue); cursor: pointer; padding: 4px;">
+                            <i class="ph ph-eye" id="editUserPasswordToggle"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">User Groups</label>
+                    <div id="editUserGroupsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-xs);">
+                        <!-- Groups will be loaded dynamically -->
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; padding: var(--space-sm); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                        <input type="checkbox" name="is_active" id="editUserIsActive" style="accent-color: var(--electric-blue);">
+                        <span style="color: var(--pure-white); font-weight: 500;">Active User</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; padding: var(--space-sm); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                        <input type="checkbox" name="is_staff" id="editUserIsStaff" style="accent-color: var(--amber-yellow);">
+                        <span style="color: var(--pure-white); font-weight: 500;">Staff User</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; padding: var(--space-sm); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                        <input type="checkbox" name="is_superuser" id="editUserIsSuperuser" style="accent-color: var(--crimson-red);">
+                        <span style="color: var(--pure-white); font-weight: 500;">Superuser</span>
+                    </label>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="ph ph-floppy-disk"></i>
+                        Update User
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditUserModal()">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Password View Modal -->
+    <div id="passwordModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 400px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 id="passwordModalTitle" style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                    View Password
+                </h3>
+                <button onclick="closePasswordModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Password:</label>
+                <div style="display: flex; gap: var(--space-xs);">
+                    <input type="password" class="form-input" id="passwordDisplay" readonly style="flex: 1; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;">
+                    <button class="btn btn-secondary" type="button" onclick="togglePassword()" style="padding: 12px;">
+                        <i class="ph ph-eye" id="passwordToggleIcon"></i>
+                    </button>
+                    <button class="btn btn-primary" type="button" onclick="copyPassword()" style="padding: 12px;">
+                        <i class="ph ph-copy"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div style="margin-top: var(--space-lg);">
+                <button type="button" class="btn btn-secondary" onclick="closePasswordModal()" style="width: 100%;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audit Logs Modal -->
+    {% if user.is_staff or user.is_superuser %}
+    <div id="auditLogsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 95%; max-width: 1400px; max-height: 95vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-list-checks" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Audit Logs
+                </h3>
+                <button onclick="closeAuditLogsModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <!-- Audit Logs Filters -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: var(--space-md); margin-bottom: var(--space-lg); padding: var(--space-md); background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm);">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Filter by User</label>
+                    <input type="text" id="auditUserFilter" class="form-input" placeholder="Username...">
+                </div>
+                
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Filter by Category</label>
+                    <select id="auditCategoryFilter" class="form-input">
+                        <option value="">All Categories</option>
+                        <option value="AUTH">Authentication</option>
+                        <option value="USER">User Management</option>
+                        <option value="VAULT">Vault Entry</option>
+                        <option value="CRED_TYPE">Credential Type</option>
+                        <option value="PERMISSION">Permission</option>
+                        <option value="SYSTEM">System</option>
+                        <option value="SECURITY">Security</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Filter by Severity</label>
+                    <select id="auditSeverityFilter" class="form-input">
+                        <option value="">All Severities</option>
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-xs); align-items: end;">
+                    <button type="button" class="btn btn-primary" onclick="filterAuditLogs()">
+                        <i class="ph ph-funnel"></i>
+                        Filter
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearAuditFilters()">
+                        <i class="ph ph-x"></i>
+                        Clear
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Audit Logs Table Container -->
+            <div id="auditLogsTableContainer">
+                <!-- Table will be loaded here -->
+            </div>
+            
+            <!-- Load More Button -->
+            <div id="auditLogsLoadMore" style="text-align: center; margin-top: var(--space-lg); display: none;">
+                <button type="button" class="btn btn-secondary" onclick="loadMoreAuditLogs()">
+                    <i class="ph ph-arrow-down"></i>
+                    Load More Logs
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Credential Types Modal -->
+    {% if user.is_staff or user.is_superuser %}
+    <div id="credentialTypesModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 95%; max-width: 1200px; max-height: 95vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-tag" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Credential Types Management
+                </h3>
+                <div style="display: flex; gap: var(--space-sm); align-items: center;">
+                    <button type="button" class="btn btn-primary" onclick="openAddCredentialTypeModal()">
+                        <i class="ph ph-plus"></i>
+                        Add Type
+                    </button>
+                    <button onclick="closeCredentialTypesModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Credential Types Grid Container -->
+            <div id="credentialTypesContainer">
+                <!-- Credential types will be loaded here -->
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Add Credential Type Modal -->
+    {% if user.is_staff or user.is_superuser %}
+    <div id="addCredentialTypeModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1100; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 500px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-plus-circle" style="color: var(--emerald-green); margin-right: var(--space-xs);"></i>
+                    Add Credential Type
+                </h3>
+                <button onclick="closeAddCredentialTypeModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="addCredentialTypeForm">
+                <div class="form-group">
+                    <label class="form-label">Name <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="text" name="name" class="form-input" required placeholder="e.g., Database, API Key, SSH Key">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input" rows="3" placeholder="Brief description of this credential type..."></textarea>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Icon</label>
+                        <select name="icon" class="form-input">
+                            <option value="key">🔑 Key</option>
+                            <option value="database">🗄️ Database</option>
+                            <option value="terminal">💻 Terminal</option>
+                            <option value="globe">🌐 Web</option>
+                            <option value="credit-card">💳 Card</option>
+                            <option value="shield">🛡️ Shield</option>
+                            <option value="cloud">☁️ Cloud</option>
+                            <option value="envelope">✉️ Email</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Color</label>
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <input type="color" name="color" class="form-input" value="#0ea5e9" style="width: 60px; padding: 8px;">
+                            <input type="text" name="color_text" class="form-input" value="#0ea5e9" placeholder="#0ea5e9" style="flex: 1;">
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="ph ph-floppy-disk"></i>
+                        Create Type
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddCredentialTypeModal()">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Edit Credential Type Modal -->
+    {% if user.is_staff or user.is_superuser %}
+    <div id="editCredentialTypeModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1100; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 500px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 20px; font-weight: 700; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-pencil" style="color: var(--amber-yellow); margin-right: var(--space-xs);"></i>
+                    Edit Credential Type
+                </h3>
+                <button onclick="closeEditCredentialTypeModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <form id="editCredentialTypeForm">
+                <input type="hidden" name="type_id" id="editTypeId">
+                
+                <div class="form-group">
+                    <label class="form-label">Name <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="text" name="name" id="editTypeName" class="form-input" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" id="editTypeDescription" class="form-input" rows="3"></textarea>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Icon</label>
+                        <select name="icon" id="editTypeIcon" class="form-input">
+                            <option value="key">🔑 Key</option>
+                            <option value="database">🗄️ Database</option>
+                            <option value="terminal">💻 Terminal</option>
+                            <option value="globe">🌐 Web</option>
+                            <option value="credit-card">💳 Card</option>
+                            <option value="shield">🛡️ Shield</option>
+                            <option value="cloud">☁️ Cloud</option>
+                            <option value="envelope">✉️ Email</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Color</label>
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <input type="color" name="color" id="editTypeColor" class="form-input" style="width: 60px; padding: 8px;">
+                            <input type="text" name="color_text" id="editTypeColorText" class="form-input" style="flex: 1;">
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="ph ph-floppy-disk"></i>
+                        Update Type
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditCredentialTypeModal()">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Admin Overview Modal -->
+    {% if user.is_staff or user.is_superuser %}
+    <div id="adminOverviewModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 95%; max-width: 1200px; max-height: 95vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--pure-white); margin: 0;">
+                    <i class="ph ph-gauge" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Admin Overview
+                </h3>
+                <button onclick="closeAdminOverviewModal()" style="background: none; border: none; color: var(--slate-muted); font-size: 20px; cursor: pointer; padding: 4px;">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <!-- System Stats Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
+                <!-- Users Stats -->
+                <div class="card" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(14, 165, 233, 0.05)); border: 1px solid rgba(14, 165, 233, 0.2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                        <div style="width: 48px; height: 48px; background: rgba(14, 165, 233, 0.2); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-users" style="color: var(--electric-blue); font-size: 24px;"></i>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--pure-white); margin: 0; font-size: 16px;">Total Users</h4>
+                            <div id="totalUsersCount" style="color: var(--electric-blue); font-size: 24px; font-weight: 800;">-</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeAdminOverviewModal(); openUserManagementModal();" style="width: 100%; font-size: 12px;">
+                        <i class="ph ph-gear"></i>
+                        Manage Users
+                    </button>
+                </div>
+
+                <!-- Vault Entries Stats -->
+                <div class="card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05)); border: 1px solid rgba(16, 185, 129, 0.2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                        <div style="width: 48px; height: 48px; background: rgba(16, 185, 129, 0.2); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-vault" style="color: var(--emerald-green); font-size: 24px;"></i>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--pure-white); margin: 0; font-size: 16px;">Vault Entries</h4>
+                            <div id="totalEntriesCount" style="color: var(--emerald-green); font-size: 24px; font-weight: 800;">{{ total_entries }}</div>
+                        </div>
+                    </div>
+                    <a href="{% url 'vault:vault_entries' %}" class="btn btn-secondary" style="width: 100%; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-xs);">
+                        <i class="ph ph-folder-open"></i>
+                        View Entries
+                    </a>
+                </div>
+
+                <!-- Credential Types Stats -->
+                <div class="card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05)); border: 1px solid rgba(245, 158, 11, 0.2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                        <div style="width: 48px; height: 48px; background: rgba(245, 158, 11, 0.2); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-tag" style="color: var(--amber-yellow); font-size: 24px;"></i>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--pure-white); margin: 0; font-size: 16px;">Credential Types</h4>
+                            <div id="totalCredentialTypesCount" style="color: var(--amber-yellow); font-size: 24px; font-weight: 800;">-</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeAdminOverviewModal(); openCredentialTypesModal();" style="width: 100%; font-size: 12px;">
+                        <i class="ph ph-gear"></i>
+                        Manage Types
+                    </button>
+                </div>
+
+                <!-- Recent Activity Stats -->
+                <div class="card" style="background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(124, 58, 237, 0.05)); border: 1px solid rgba(124, 58, 237, 0.2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                        <div style="width: 48px; height: 48px; background: rgba(124, 58, 237, 0.2); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-activity" style="color: var(--deep-purple); font-size: 24px;"></i>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--pure-white); margin: 0; font-size: 16px;">Today's Activity</h4>
+                            <div id="todayActivityCount" style="color: var(--deep-purple); font-size: 24px; font-weight: 800;">-</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeAdminOverviewModal(); openAuditLogsModal();" style="width: 100%; font-size: 12px;">
+                        <i class="ph ph-chart-line"></i>
+                        View Audit Logs
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div style="margin-bottom: var(--space-xl);">
+                <h4 style="color: var(--pure-white); margin-bottom: var(--space-md); font-size: 18px; font-weight: 700;">
+                    <i class="ph ph-lightning" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Quick Actions
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-sm);">
+                    <button class="btn btn-primary" onclick="closeAdminOverviewModal(); openAddUserModal();">
+                        <i class="ph ph-user-plus"></i>
+                        Add New User
+                    </button>
+                    <button class="btn btn-primary" onclick="closeAdminOverviewModal(); openAddCredentialTypeModal();">
+                        <i class="ph ph-tag"></i>
+                        Add Credential Type
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportSystemReport();">
+                        <i class="ph ph-download"></i>
+                        Export Report
+                    </button>
+                    <button class="btn btn-secondary" onclick="openSystemSettings();">
+                        <i class="ph ph-gear-six"></i>
+                        System Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recent Activity Summary -->
+            <div>
+                <h4 style="color: var(--pure-white); margin-bottom: var(--space-md); font-size: 18px; font-weight: 700;">
+                    <i class="ph ph-clock-clockwise" style="color: var(--electric-blue); margin-right: var(--space-xs);"></i>
+                    Recent Activity Summary
+                </h4>
+                <div id="recentActivitySummary" style="background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-md); padding: var(--space-lg);">
+                    <!-- Recent activity will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Modal Management
+    function openAddEntryModal() {
+        document.getElementById('addEntryModal').style.display = 'flex';
+    }
+    
+    function closeAddEntryModal() {
+        document.getElementById('addEntryModal').style.display = 'none';
+        document.getElementById('addEntryForm').reset();
+    }
+    
+    function closePasswordModal() {
+        document.getElementById('passwordModal').style.display = 'none';
+        document.getElementById('passwordDisplay').value = '';
+        document.getElementById('passwordDisplay').type = 'password';
+        document.getElementById('passwordToggleIcon').className = 'ph ph-eye';
+    }
+    
+    // Search and Filter Functionality
+    document.getElementById('searchInput').addEventListener('input', filterEntries);
+    document.getElementById('typeFilter').addEventListener('change', filterEntries);
+    document.getElementById('sortFilter').addEventListener('change', sortEntries);
+    
+    function filterEntries() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const typeFilter = document.getElementById('typeFilter').value;
+        const entries = document.querySelectorAll('.vault-entry');
+        
+        entries.forEach(entry => {
+            const name = entry.getAttribute('data-name');
+            const type = entry.getAttribute('data-type');
+            
+            const matchesSearch = name.includes(searchTerm);
+            const matchesType = !typeFilter || type === typeFilter;
+            
+            entry.style.display = matchesSearch && matchesType ? 'block' : 'none';
+        });
+    }
+    
+    function sortEntries() {
+        const sortBy = document.getElementById('sortFilter').value;
+        const container = document.getElementById('vaultEntries');
+        const entries = Array.from(container.children);
+        
+        entries.sort((a, b) => {
+            let aVal, bVal;
+            
+            if (sortBy.includes('name')) {
+                aVal = a.getAttribute('data-name');
+                bVal = b.getAttribute('data-name');
+            } else {
+                aVal = new Date(a.getAttribute('data-updated'));
+                bVal = new Date(b.getAttribute('data-updated'));
+            }
+            
+            if (sortBy.startsWith('-')) {
+                return aVal > bVal ? -1 : 1;
+            } else {
+                return aVal < bVal ? -1 : 1;
+            }
+        });
+        
+        entries.forEach(entry => container.appendChild(entry));
+    }
+    
+    // Password Management
+    function viewPassword(entryId, entryName) {
+        console.log('viewPassword called for entry:', entryId, entryName);  // Debug log
+        document.getElementById('passwordModalTitle').textContent = `Password for ${entryName}`;
+        document.getElementById('passwordDisplay').value = 'Loading...';
+        document.getElementById('passwordModal').style.display = 'flex';
+        
+        // Fetch real password from the server
+        fetch(`/ajax/vault-entry/${entryId}/get/`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('passwordDisplay').value = data.data.password;
+            } else {
+                document.getElementById('passwordDisplay').value = 'Error loading password';
+                showNotification(data.error || 'Failed to load password', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('passwordDisplay').value = 'Error loading password';
+            showNotification('An unexpected error occurred', 'error');
+        });
+    }
+    
+    function togglePassword() {
+        const passwordField = document.getElementById('passwordDisplay');
+        const toggleIcon = document.getElementById('passwordToggleIcon');
+        
+        if (passwordField.type === 'password') {
+            passwordField.type = 'text';
+            toggleIcon.className = 'ph ph-eye-slash';
+        } else {
+            passwordField.type = 'password';
+            toggleIcon.className = 'ph ph-eye';
+        }
+    }
+    
+    function copyPassword() {
+        const passwordField = document.getElementById('passwordDisplay');
+        passwordField.select();
+        document.execCommand('copy');
+        
+        // Visual feedback
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="ph ph-check"></i>';
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
+    }
+    
+    // CSRF Token Helper - Get from form input
+    function getCSRFToken() {
+        // Get token from the form's hidden input
+        const formToken = document.querySelector('#addEntryForm [name=csrfmiddlewaretoken]');
+        if (formToken) {
+            return formToken.value;
+        }
+        
+        // Fallback to cookie
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Show notification
+    function showNotification(message, type = 'success') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `card message-${type}`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            min-width: 300px;
+            max-width: 500px;
+            margin-bottom: var(--space-md);
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        const icon = type === 'success' ? 'check-circle' : 
+                     type === 'error' ? 'warning-circle' : 'info';
+        
+        notification.innerHTML = `
+            <i class="ph ph-${icon}" style="margin-right: var(--space-xs);"></i>
+            ${message}
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-in';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 5000);
+    }
+
+    // Add CSS for notifications
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Form Submission
+    {% if can_edit %}
+    document.getElementById('addEntryForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Get form data
+        const formData = {
+            name: document.getElementById('entryName').value,
+            username: document.getElementById('entryUsername').value,
+            password: document.getElementById('entryPassword').value,
+            credential_type: document.getElementById('entryType').value,
+            url: document.getElementById('entryUrl').value,
+            notes: document.getElementById('entryNotes').value
+        };
+        
+        // Show loading state
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalHTML = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite; margin-right: var(--space-xs);"></i>Creating...';
+        submitBtn.disabled = true;
+        
+        // Send AJAX request
+        fetch('/ajax/vault-entry/create/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                closeAddEntryModal();
+                // Refresh the page to show the new entry
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                if (data.errors) {
+                    // Display form validation errors
+                    let errorMessage = 'Please fix the following errors:\n';
+                    Object.entries(data.errors).forEach(([field, errors]) => {
+                        errorMessage += `${field}: ${errors.join(', ')}\n`;
+                    });
+                    showNotification(errorMessage, 'error');
+                } else {
+                    showNotification(data.error || 'Failed to create vault entry', 'error');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('An unexpected error occurred', 'error');
+        })
+        .finally(() => {
+            // Restore button state
+            submitBtn.innerHTML = originalHTML;
+            submitBtn.disabled = false;
+        });
+    });
+    {% endif %}
+    
+    // Utility Functions
+    function refreshDashboard() {
+        window.location.reload();
+    }
+    
+    function exportEntries() {
+        alert('Export functionality would be implemented here');
+    }
+    
+    function editEntry(entryId) {
+        // For now, redirect to the vault entries page where editing is fully functional
+        window.location.href = '{% url "vault:vault_entries" %}';
+    }
+    
+    // User Management Functions
+    function openUserManagementModal() {
+        console.log('openUserManagementModal called');
+        document.getElementById('userManagementModal').style.display = 'flex';
+        loadUsers();
+    }
+    
+    function closeUserManagementModal() {
+        document.getElementById('userManagementModal').style.display = 'none';
+    }
+    
+    function openAddUserModal() {
+        document.getElementById('addUserModal').style.display = 'flex';
+        loadGroupsForForm();
+        // Reset form
+        document.getElementById('addUserForm').reset();
+        document.querySelector('[name="is_active"]').checked = true;
+    }
+    
+    function closeAddUserModal() {
+        document.getElementById('addUserModal').style.display = 'none';
+    }
+    
+    function openEditUserModal(userId) {
+        document.getElementById('editUserModal').style.display = 'flex';
+        loadUserForEdit(userId);
+    }
+    
+    function closeEditUserModal() {
+        document.getElementById('editUserModal').style.display = 'none';
+    }
+    
+    function openAuditLogsModal() {
+        document.getElementById('auditLogsModal').style.display = 'flex';
+        loadAuditLogs();
+    }
+    
+    function closeAuditLogsModal() {
+        document.getElementById('auditLogsModal').style.display = 'none';
+        // Reset pagination
+        window.auditLogsOffset = 0;
+        window.auditLogsHasMore = false;
+    }
+    
+    // Load users data
+    function loadUsers() {
+        fetch('/ajax/users/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Store data globally for use in other functions
+                window.loadedUsers = data.users;
+                window.availableGroups = data.groups;
+                
+                renderUsersTable(data.users);
+                loadGroupsForForm(); // Load groups in the add/edit forms
+            } else {
+                document.getElementById('usersTableContainer').innerHTML = `
+                    <div style="text-align: center; padding: var(--space-2xl); color: var(--crimson-red);">
+                        <i class="ph ph-warning-circle" style="font-size: 32px;"></i>
+                        <div style="margin-top: var(--space-sm);">${data.error}</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('usersTableContainer').innerHTML = `
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--crimson-red);">
+                    <i class="ph ph-warning-circle" style="font-size: 32px;"></i>
+                    <div style="margin-top: var(--space-sm);">Failed to load users</div>
+                </div>
+            `;
+        });
+    }
+    
+    // Render users table
+    function renderUsersTable(users) {
+        if (users.length === 0) {
+            document.getElementById('usersTableContainer').innerHTML = `
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--slate-muted);">
+                    <i class="ph ph-users" style="font-size: 64px;"></i>
+                    <div style="margin-top: var(--space-md); font-size: 18px;">No users found</div>
+                </div>
+            `;
+            return;
+        }
+        
+        let tableHTML = `
+            <div style="overflow-x: auto; border-radius: var(--radius-md);">
+                <table style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                    <thead>
+                        <tr>
+                            <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border); border-top-left-radius: var(--radius-sm);">User</th>
+                            <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Email</th>
+                            <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Groups</th>
+                            <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Status</th>
+                            <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border); border-top-right-radius: var(--radius-sm);">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        users.forEach((user, index) => {
+            const isLastRow = index === users.length - 1;
+            const statusColor = user.is_active ? 'var(--emerald-green)' : 'var(--crimson-red)';
+            const statusIcon = user.is_active ? 'check-circle' : 'x-circle';
+            
+            tableHTML += `
+                <tr style="transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='rgba(51, 65, 85, 0.5)'" onmouseout="this.style.backgroundColor='rgba(51, 65, 85, 0.3)'">
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none; ${isLastRow ? 'border-bottom-left-radius: var(--radius-sm);' : ''}">
+                        <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--electric-blue), var(--deep-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--pure-white);">
+                                ${(user.first_name || user.username).charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <div style="font-weight: 600; color: var(--pure-white);">${user.first_name || user.username} ${user.last_name || ''}</div>
+                                <div style="font-size: 12px; color: var(--slate-muted);">@${user.username}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        ${user.email}
+                        <div style="font-size: 11px; color: var(--slate-muted); margin-top: 2px;">${user.source}</div>
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            ${user.groups.map(group => `
+                                <span style="padding: 2px 8px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 4px; font-size: 10px; font-weight: 600; color: var(--electric-blue); text-transform: uppercase;">
+                                    ${group}
+                                </span>
+                            `).join('')}
+                        </div>
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                            <i class="ph ph-${statusIcon}" style="color: ${statusColor};"></i>
+                            <span style="color: ${statusColor}; font-weight: 500;">${user.is_active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                        ${user.is_staff ? '<div style="font-size: 10px; color: var(--amber-yellow); margin-top: 2px;">STAFF</div>' : ''}
+                        ${user.is_superuser ? '<div style="font-size: 10px; color: var(--crimson-red); margin-top: 2px;">SUPERUSER</div>' : ''}
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none; ${isLastRow ? 'border-bottom-right-radius: var(--radius-sm);' : ''}">
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <button type="button" class="btn btn-secondary" onclick="openEditUserModal(${user.id})" style="font-size: 12px; padding: 8px 12px;">
+                                <i class="ph ph-pencil"></i>
+                                Edit
+                            </button>
+                            ${user.id !== {{ request.user.id }} && {{ request.user.is_superuser|yesno:"true,false" }} ? `
+                                <button type="button" class="btn btn-danger" onclick="deleteUser(${user.id}, '${user.username}')" style="font-size: 12px; padding: 8px 12px;">
+                                    <i class="ph ph-trash"></i>
+                                    Delete
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        tableHTML += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        document.getElementById('usersTableContainer').innerHTML = tableHTML;
+    }
+    
+    // Load groups for the add/edit user forms
+    function loadGroupsForForm() {
+        // This will be populated when loadUsers() is called
+        // The groups data is already available in the global scope
+        const addGroupsContainer = document.getElementById('addUserGroups');
+        const editGroupsContainer = document.getElementById('editUserGroups');
+        
+        if (window.availableGroups && addGroupsContainer) {
+            let groupsHTML = '';
+            window.availableGroups.forEach(group => {
+                groupsHTML += `
+                    <label style="display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs); cursor: pointer;">
+                        <input type="checkbox" name="groups" value="${group.id}" style="margin: 0;">
+                        <span style="color: var(--pure-white); font-size: 14px;">${group.name}</span>
+                    </label>
+                `;
+            });
+            addGroupsContainer.innerHTML = groupsHTML;
+            if (editGroupsContainer) {
+                editGroupsContainer.innerHTML = groupsHTML;
+            }
+        }
+    }
+    
+    // Load user data for editing
+    function loadUserForEdit(userId) {
+        // Find the user in the loaded users data
+        const user = window.loadedUsers?.find(u => u.id === userId);
+        if (!user) {
+            showNotification('User data not found', 'error');
+            return;
+        }
+        
+        // Populate edit form fields
+        document.getElementById('editUserId').value = user.id;
+        document.getElementById('editUserUsername').value = user.username;
+        document.getElementById('editUserEmail').value = user.email;
+        document.getElementById('editUserFirstName').value = user.first_name || '';
+        document.getElementById('editUserLastName').value = user.last_name || '';
+        document.getElementById('editUserIsActive').checked = user.is_active;
+        document.getElementById('editUserIsStaff').checked = user.is_staff;
+        document.getElementById('editUserIsSuperuser').checked = user.is_superuser;
+        
+        // Set group checkboxes
+        const groupCheckboxes = document.querySelectorAll('#editUserGroups input[name="groups"]');
+        groupCheckboxes.forEach(checkbox => {
+            checkbox.checked = user.groups.includes(window.availableGroups?.find(g => g.id == checkbox.value)?.name);
+        });
+    }
+    
+    // Open edit user modal
+    function openEditUserModal(userId) {
+        loadUserForEdit(userId);
+        document.getElementById('editUserModal').style.display = 'flex';
+    }
+    
+    // Close edit user modal
+    function closeEditUserModal() {
+        document.getElementById('editUserModal').style.display = 'none';
+        document.getElementById('editUserForm').reset();
+    }
+    
+    // Handle add user form submission
+    document.getElementById('addUserForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const userData = {
+            username: formData.get('username'),
+            email: formData.get('email'),
+            password: formData.get('password'),
+            first_name: formData.get('first_name'),
+            last_name: formData.get('last_name'),
+            is_active: formData.get('is_active') === 'on',
+            is_staff: formData.get('is_staff') === 'on',
+            is_superuser: formData.get('is_superuser') === 'on',
+            groups: Array.from(formData.getAll('groups')).map(id => parseInt(id))
+        };
+        
+        fetch('/ajax/user/create/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify(userData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                closeAddUserModal();
+                loadUsers(); // Refresh the users list
+            } else {
+                showNotification(data.error || 'Failed to create user', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('An unexpected error occurred', 'error');
+        });
+    });
+    
+    // Handle edit user form submission
+    document.getElementById('editUserForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const userId = formData.get('user_id');
+        const userData = {
+            first_name: formData.get('first_name'),
+            last_name: formData.get('last_name'),
+            email: formData.get('email'),
+            is_active: formData.get('is_active') === 'on',
+            is_staff: formData.get('is_staff') === 'on',
+            is_superuser: formData.get('is_superuser') === 'on',
+            groups: Array.from(formData.getAll('groups')).map(id => parseInt(id))
+        };
+        
+        // Include password if provided
+        const password = formData.get('password');
+        if (password && password.trim()) {
+            userData.password = password;
+        }
+        
+        fetch(`/ajax/user/${userId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify(userData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                closeEditUserModal();
+                loadUsers(); // Refresh the users list
+            } else {
+                showNotification(data.error || 'Failed to update user', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('An unexpected error occurred', 'error');
+        });
+    });
+    
+    // Delete user function
+    function deleteUser(userId, username) {
+        if (confirm(`Are you sure you want to delete user "${username}"? This action cannot be undone.`)) {
+            fetch(`/ajax/user/${userId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken(),
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    loadUsers(); // Refresh the users list
+                } else {
+                    showNotification(data.error || 'Failed to delete user', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('An unexpected error occurred', 'error');
+            });
+        }
+    }
+    
+    // Audit Logs Management
+    window.auditLogsOffset = 0;
+    window.auditLogsHasMore = false;
+    
+    function loadAuditLogs(loadMore = false) {
+        if (!loadMore) {
+            window.auditLogsOffset = 0;
+            document.getElementById('auditLogsTableContainer').innerHTML = `
+                <div style="text-align: center; padding: var(--space-xl); color: var(--electric-blue);">
+                    <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                    <div style="margin-top: var(--space-sm);">Loading audit logs...</div>
+                </div>
+            `;
+        }
+        
+        // Get filter values
+        const userFilter = document.getElementById('auditUserFilter')?.value || '';
+        const categoryFilter = document.getElementById('auditCategoryFilter')?.value || '';
+        const severityFilter = document.getElementById('auditSeverityFilter')?.value || '';
+        
+        // Build query parameters
+        const params = new URLSearchParams({
+            limit: '50',
+            offset: window.auditLogsOffset.toString()
+        });
+        
+        if (userFilter) params.append('user', userFilter);
+        if (categoryFilter) params.append('category', categoryFilter);
+        if (severityFilter) params.append('severity', severityFilter);
+        
+        fetch(`/ajax/audit-logs/?${params}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Audit logs response:', data);  // Debug log
+            if (data.success) {
+                console.log('Number of logs:', data.logs.length);  // Debug log
+                if (loadMore) {
+                    renderAuditLogs(data.logs, true);
+                } else {
+                    renderAuditLogs(data.logs, false);
+                }
+                
+                window.auditLogsHasMore = data.has_more;
+                window.auditLogsOffset += data.logs.length;
+                
+                // Show/hide load more button
+                const loadMoreBtn = document.getElementById('auditLogsLoadMore');
+                if (data.has_more) {
+                    loadMoreBtn.style.display = 'block';
+                } else {
+                    loadMoreBtn.style.display = 'none';
+                }
+            } else {
+                document.getElementById('auditLogsTableContainer').innerHTML = `
+                    <div style="text-align: center; padding: var(--space-2xl); color: var(--crimson-red);">
+                        <i class="ph ph-warning-circle" style="font-size: 32px;"></i>
+                        <div style="margin-top: var(--space-sm);">${data.error}</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('auditLogsTableContainer').innerHTML = `
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--crimson-red);">
+                    <i class="ph ph-warning-circle" style="font-size: 32px;"></i>
+                    <div style="margin-top: var(--space-sm);">Failed to load audit logs</div>
+                </div>
+            `;
+        });
+    }
+    
+    function renderAuditLogs(logs, append = false) {
+        const container = document.getElementById('auditLogsTableContainer');
+        
+        if (!append) {
+            container.innerHTML = '';
+        }
+        
+        if (logs.length === 0 && !append) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--slate-muted);">
+                    <i class="ph ph-file-x" style="font-size: 48px; margin-bottom: var(--space-md);"></i>
+                    <h4 style="color: var(--pure-white); margin-bottom: var(--space-sm);">No Audit Logs Found</h4>
+                    <p>No audit logs match your current filters.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let tableHTML = '';
+        if (!append) {
+            tableHTML = `
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead>
+                            <tr>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border); border-top-left-radius: var(--radius-sm);">Timestamp</th>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">User</th>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Category</th>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Action</th>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Severity</th>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border);">Resource</th>
+                                <th style="background: var(--slate-secondary); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border); border-top-right-radius: var(--radius-sm);">IP Address</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditLogsTableBody">
+            `;
+        } else {
+            tableHTML = '';
+        }
+        
+        logs.forEach((log, index) => {
+            const logDate = new Date(log.timestamp);
+            
+            // Category colors and icons
+            const categoryStyle = {
+                'Authentication': { color: 'var(--electric-blue)', icon: 'sign-in' },
+                'User Management': { color: 'var(--deep-purple)', icon: 'users' },
+                'Vault Entry': { color: 'var(--emerald-green)', icon: 'key' },
+                'Credential Type': { color: 'var(--amber-yellow)', icon: 'tag' },
+                'Permission': { color: 'var(--crimson-red)', icon: 'shield' },
+                'System': { color: 'var(--slate-muted)', icon: 'gear' },
+                'Security': { color: 'var(--crimson-red)', icon: 'warning-circle' }
+            }[log.category] || { color: 'var(--soft-grey)', icon: 'circle' };
+            
+            // Severity colors
+            const severityStyle = {
+                'Low': { color: 'var(--emerald-green)', bg: 'rgba(16, 185, 129, 0.1)' },
+                'Medium': { color: 'var(--amber-yellow)', bg: 'rgba(245, 158, 11, 0.1)' },
+                'High': { color: 'var(--crimson-red)', bg: 'rgba(239, 68, 68, 0.1)' },
+                'Critical': { color: 'var(--crimson-red)', bg: 'rgba(239, 68, 68, 0.2)' }
+            }[log.severity] || { color: 'var(--soft-grey)', bg: 'rgba(148, 163, 184, 0.1)' };
+            
+            // Success/failure indicator
+            const statusIcon = log.success ? 'check-circle' : 'x-circle';
+            const statusColor = log.success ? 'var(--emerald-green)' : 'var(--crimson-red)';
+            
+            tableHTML += `
+                <tr style="transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='rgba(51, 65, 85, 0.5)'" onmouseout="this.style.backgroundColor='rgba(51, 65, 85, 0.3)'">
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--pure-white); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        <div style="font-weight: 600;">${logDate.toLocaleDateString()}</div>
+                        <div style="font-size: 12px; color: var(--slate-muted);">${logDate.toLocaleTimeString()}</div>
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        ${log.user ? `
+                            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--electric-blue), var(--deep-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--pure-white); font-size: 12px;">
+                                    ${(log.user.first_name || log.user.username).charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--pure-white);">${log.user.first_name || log.user.username} ${log.user.last_name || ''}</div>
+                                    <div style="font-size: 11px; color: var(--slate-muted);">@${log.user.username}</div>
+                                </div>
+                            </div>
+                        ` : '<span style="color: var(--slate-muted); font-style: italic;">System</span>'}
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                            <i class="ph ph-${categoryStyle.icon}" style="color: ${categoryStyle.color};"></i>
+                            <span style="color: ${categoryStyle.color}; font-weight: 600; font-size: 12px;">${log.category}</span>
+                        </div>
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                            <i class="ph ph-${statusIcon}" style="color: ${statusColor}; font-size: 12px;"></i>
+                            <div>
+                                <div style="font-weight: 600; color: var(--pure-white); font-size: 13px;">${log.action}</div>
+                                <div style="font-size: 11px; color: var(--slate-muted); margin-top: 2px;" title="${log.description}">${log.description.length > 40 ? log.description.substring(0, 40) + '...' : log.description}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        <span style="background: ${severityStyle.bg}; color: ${severityStyle.color}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">
+                            ${log.severity}
+                        </span>
+                        ${log.risk_score > 0 ? `<div style="font-size: 10px; color: var(--slate-muted); margin-top: 2px;">Risk: ${log.risk_score}</div>` : ''}
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        ${log.resource ? `
+                            <div>
+                                <div style="font-weight: 600; color: var(--pure-white); font-size: 12px;">${log.resource.name || log.resource.id}</div>
+                                <div style="font-size: 10px; color: var(--slate-muted);">${log.resource.type}</div>
+                            </div>
+                        ` : '<span style="color: var(--slate-muted); font-style: italic; font-size: 12px;">—</span>'}
+                    </td>
+                    <td style="background: rgba(51, 65, 85, 0.3); color: var(--soft-grey); padding: var(--space-md); border: 1px solid var(--glass-border); border-top: none;">
+                        ${log.ip_address ? `<code style="font-size: 12px; color: var(--amber-yellow); background: rgba(245, 158, 11, 0.1); padding: 2px 6px; border-radius: 4px;">${log.ip_address}</code>` : '<span style="color: var(--slate-muted); font-size: 12px;">—</span>'}
+                    </td>
+                </tr>
+            `;
+        });
+        
+        if (!append) {
+            tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = tableHTML;
+        } else {
+            // Append to existing table body
+            document.getElementById('auditLogsTableBody').insertAdjacentHTML('beforeend', tableHTML);
+        }
+    }
+    
+    function filterAuditLogs() {
+        loadAuditLogs(false);
+    }
+    
+    function clearAuditFilters() {
+        document.getElementById('auditUserFilter').value = '';
+        document.getElementById('auditCategoryFilter').value = '';
+        document.getElementById('auditSeverityFilter').value = '';
+        loadAuditLogs(false);
+    }
+    
+    function loadMoreAuditLogs() {
+        if (window.auditLogsHasMore) {
+            loadAuditLogs(true);
+        }
+    }
+    
+    // Credential Types Management
+    function openCredentialTypesModal() {
+        document.getElementById('credentialTypesModal').style.display = 'flex';
+        loadCredentialTypes();
+    }
+    
+    function closeCredentialTypesModal() {
+        document.getElementById('credentialTypesModal').style.display = 'none';
+    }
+    
+    function openAddCredentialTypeModal() {
+        document.getElementById('addCredentialTypeModal').style.display = 'flex';
+        // Sync color inputs
+        syncColorInputs('addCredentialTypeForm');
+    }
+    
+    function closeAddCredentialTypeModal() {
+        document.getElementById('addCredentialTypeModal').style.display = 'none';
+        document.getElementById('addCredentialTypeForm').reset();
+    }
+    
+    function openEditCredentialTypeModal(typeId) {
+        loadCredentialTypeForEdit(typeId);
+        document.getElementById('editCredentialTypeModal').style.display = 'flex';
+    }
+    
+    function closeEditCredentialTypeModal() {
+        document.getElementById('editCredentialTypeModal').style.display = 'none';
+        document.getElementById('editCredentialTypeForm').reset();
+    }
+    
+    function loadCredentialTypes() {
+        document.getElementById('credentialTypesContainer').innerHTML = `
+            <div style="text-align: center; padding: var(--space-xl); color: var(--electric-blue);">
+                <i class="ph ph-spinner" style="font-size: 32px; animation: spin 1s linear infinite;"></i>
+                <div style="margin-top: var(--space-sm);">Loading credential types...</div>
+            </div>
+        `;
+        
+        fetch('/ajax/credential-types/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderCredentialTypes(data.credential_types);
+            } else {
+                document.getElementById('credentialTypesContainer').innerHTML = `
+                    <div style="text-align: center; padding: var(--space-2xl); color: var(--crimson-red);">
+                        <i class="ph ph-warning-circle" style="font-size: 32px;"></i>
+                        <div style="margin-top: var(--space-sm);">${data.error}</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('credentialTypesContainer').innerHTML = `
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--crimson-red);">
+                    <i class="ph ph-warning-circle" style="font-size: 32px;"></i>
+                    <div style="margin-top: var(--space-sm);">Failed to load credential types</div>
+                </div>
+            `;
+        });
+    }
+    
+    function renderCredentialTypes(types) {
+        const container = document.getElementById('credentialTypesContainer');
+        
+        if (types.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: var(--space-2xl); color: var(--slate-muted);">
+                    <i class="ph ph-tag" style="font-size: 48px; margin-bottom: var(--space-md);"></i>
+                    <h4 style="color: var(--pure-white); margin-bottom: var(--space-sm);">No Credential Types</h4>
+                    <p>Create your first credential type to organize vault entries.</p>
+                    <button class="btn btn-primary" onclick="openAddCredentialTypeModal()" style="margin-top: var(--space-md);">
+                        <i class="ph ph-plus-circle"></i>
+                        Add First Type
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        let gridHTML = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-md);">
+        `;
+        
+        types.forEach(type => {
+            const iconMap = {
+                'key': 'ph-key',
+                'database': 'ph-database',
+                'terminal': 'ph-terminal',
+                'globe': 'ph-globe',
+                'credit-card': 'ph-credit-card',
+                'shield': 'ph-shield',
+                'cloud': 'ph-cloud',
+                'envelope': 'ph-envelope'
+            };
+            
+            const iconClass = iconMap[type.icon] || 'ph-key';
+            const createdDate = type.created_at ? new Date(type.created_at).toLocaleDateString() : 'Unknown';
+            
+            gridHTML += `
+                <div class="card" style="position: relative; border-left: 4px solid ${type.color};">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md);">
+                        <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                            <div style="width: 48px; height: 48px; border-radius: var(--radius-md); background: ${type.color}20; border: 2px solid ${type.color}40; display: flex; align-items: center; justify-content: center;">
+                                <i class="ph ${iconClass}" style="color: ${type.color}; font-size: 24px;"></i>
+                            </div>
+                            <div>
+                                <h4 style="font-size: 18px; font-weight: 700; color: var(--pure-white); margin: 0;">${type.name}</h4>
+                                <div style="font-size: 12px; color: var(--slate-muted); margin-top: 2px;">Created ${createdDate}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <button type="button" class="btn btn-secondary" onclick="openEditCredentialTypeModal(${type.id})" style="font-size: 12px; padding: 8px 12px;">
+                                <i class="ph ph-pencil"></i>
+                                Edit
+                            </button>
+                            ${type.entry_count === 0 && {{ request.user.is_superuser|yesno:"true,false" }} ? `
+                                <button type="button" class="btn btn-danger" onclick="deleteCredentialType(${type.id}, '${type.name}')" style="font-size: 12px; padding: 8px 12px;">
+                                    <i class="ph ph-trash"></i>
+                                    Delete
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    ${type.description ? `
+                        <div style="background: rgba(71, 85, 105, 0.3); border-radius: var(--radius-sm); padding: var(--space-sm); margin-bottom: var(--space-md);">
+                            <div style="color: var(--slate-muted); font-size: 14px; line-height: 1.5;">${type.description}</div>
+                        </div>
+                    ` : ''}
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: var(--space-md); border-top: 1px solid var(--glass-border);">
+                        <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                            <i class="ph ph-folder" style="color: var(--electric-blue);"></i>
+                            <span style="color: var(--soft-grey); font-size: 14px; font-weight: 500;">${type.entry_count} entries</span>
+                        </div>
+                        <div style="padding: 4px 8px; background: ${type.color}20; border: 1px solid ${type.color}40; border-radius: 4px; font-size: 10px; font-weight: 600; color: ${type.color}; text-transform: uppercase;">
+                            ${type.icon}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        gridHTML += '</div>';
+        container.innerHTML = gridHTML;
+        
+        // Store types globally for editing
+        window.loadedCredentialTypes = types;
+    }
+    
+    function loadCredentialTypeForEdit(typeId) {
+        const type = window.loadedCredentialTypes?.find(t => t.id === typeId);
+        if (!type) {
+            showNotification('Credential type data not found', 'error');
+            return;
+        }
+        
+        document.getElementById('editTypeId').value = type.id;
+        document.getElementById('editTypeName').value = type.name;
+        document.getElementById('editTypeDescription').value = type.description || '';
+        document.getElementById('editTypeIcon').value = type.icon;
+        document.getElementById('editTypeColor').value = type.color;
+        document.getElementById('editTypeColorText').value = type.color;
+    }
+    
+    function syncColorInputs(formId) {
+        const form = document.getElementById(formId);
+        const colorInput = form.querySelector('input[name="color"]');
+        const colorTextInput = form.querySelector('input[name="color_text"]');
+        
+        if (colorInput && colorTextInput) {
+            colorInput.addEventListener('input', function() {
+                colorTextInput.value = this.value;
+            });
+            
+            colorTextInput.addEventListener('input', function() {
+                if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+                    colorInput.value = this.value;
+                }
+            });
+        }
+    }
+    
+    function deleteCredentialType(typeId, typeName) {
+        if (confirm(`Are you sure you want to delete credential type "${typeName}"? This action cannot be undone.`)) {
+            fetch(`/ajax/credential-type/${typeId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken(),
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    loadCredentialTypes(); // Refresh the list
+                } else {
+                    showNotification(data.error || 'Failed to delete credential type', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('An unexpected error occurred', 'error');
+            });
+        }
+    }
+    
+    // Admin Overview Management
+    function openAdminOverviewModal() {
+        console.log('openAdminOverviewModal called');
+        document.getElementById('adminOverviewModal').style.display = 'flex';
+        loadAdminOverviewStats();
+    }
+    
+    // Make functions globally available for sidebar navigation
+    window.openAdminOverviewModal = openAdminOverviewModal;
+    window.openUserManagementModal = openUserManagementModal;
+    window.openAuditLogsModal = openAuditLogsModal;
+    window.openCredentialTypesModal = openCredentialTypesModal;
+    window.openAddEntryModal = openAddEntryModal;
+    window.viewPassword = viewPassword;
+    window.editEntry = editEntry;
+    
+    // Debug log to confirm functions are loaded
+    console.log('🚀 All admin functions loaded and attached to window:', {
+        openAdminOverviewModal: typeof window.openAdminOverviewModal,
+        openUserManagementModal: typeof window.openUserManagementModal,
+        openAuditLogsModal: typeof window.openAuditLogsModal,
+        openCredentialTypesModal: typeof window.openCredentialTypesModal,
+        openAddEntryModal: typeof window.openAddEntryModal
+    });
+    
+    // Simple test function
+    window.testJS = function() {
+        alert('JavaScript is working! ✅');
+        console.log('✅ JavaScript test successful');
+    };
+    
+    function closeAdminOverviewModal() {
+        document.getElementById('adminOverviewModal').style.display = 'none';
+    }
+    
+    function loadAdminOverviewStats() {
+        // Load users count
+        fetch('/ajax/users/', {
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCSRFToken() }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('totalUsersCount').textContent = data.users.length;
+            }
+        })
+        .catch(error => console.error('Error loading users count:', error));
+        
+        // Load credential types count
+        fetch('/ajax/credential-types/', {
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCSRFToken() }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('totalCredentialTypesCount').textContent = data.credential_types.length;
+            }
+        })
+        .catch(error => console.error('Error loading credential types count:', error));
+        
+        // Load today's activity count
+        const today = new Date().toISOString().split('T')[0];
+        fetch(`/ajax/audit-logs/?limit=1000`, {
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCSRFToken() }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const todayLogs = data.logs.filter(log => {
+                    const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+                    return logDate === today;
+                });
+                document.getElementById('todayActivityCount').textContent = todayLogs.length;
+                
+                // Show recent activity summary
+                renderRecentActivitySummary(data.logs.slice(0, 10));
+            }
+        })
+        .catch(error => console.error('Error loading activity count:', error));
+    }
+    
+    function renderRecentActivitySummary(recentLogs) {
+        const container = document.getElementById('recentActivitySummary');
+        
+        if (recentLogs.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; color: var(--slate-muted); padding: var(--space-lg);">
+                    <i class="ph ph-clock" style="font-size: 32px; margin-bottom: var(--space-sm);"></i>
+                    <p>No recent activity</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let activityHTML = '<div style="space-y: var(--space-sm);">';
+        
+        recentLogs.forEach((log, index) => {
+            const logDate = new Date(log.timestamp);
+            const timeAgo = getTimeAgo(logDate);
+            
+            const actionColor = {
+                'VIEW': 'var(--electric-blue)',
+                'CREATE': 'var(--emerald-green)',
+                'UPDATE': 'var(--amber-yellow)',
+                'DELETE': 'var(--crimson-red)'
+            }[log.access_type] || 'var(--soft-grey)';
+            
+            const actionIcon = {
+                'VIEW': 'eye',
+                'CREATE': 'plus-circle',
+                'UPDATE': 'pencil',
+                'DELETE': 'trash'
+            }[log.access_type] || 'circle';
+            
+            activityHTML += `
+                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: rgba(71, 85, 105, 0.2); border-radius: var(--radius-sm); ${index < recentLogs.length - 1 ? 'margin-bottom: var(--space-sm);' : ''}">
+                    <div style="width: 32px; height: 32px; background: ${actionColor}20; border: 1px solid ${actionColor}40; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <i class="ph ph-${actionIcon}" style="color: ${actionColor}; font-size: 14px;"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="color: var(--pure-white); font-weight: 500; font-size: 14px;">
+                            ${log.user.first_name || log.user.username} ${log.user.last_name || ''} 
+                            <span style="color: ${actionColor}; text-transform: lowercase;">${log.access_type.toLowerCase()}ed</span>
+                            ${log.vault_entry ? `"${log.vault_entry.name}"` : 'a vault entry'}
+                        </div>
+                        <div style="color: var(--slate-muted); font-size: 12px;">${timeAgo}</div>
+                    </div>
+                    <div style="color: var(--slate-muted); font-size: 11px; font-family: monospace;">
+                        ${log.ip_address}
+                    </div>
+                </div>
+            `;
+        });
+        
+        activityHTML += '</div>';
+        container.innerHTML = activityHTML;
+    }
+    
+    function getTimeAgo(date) {
+        const now = new Date();
+        const diffInSeconds = Math.floor((now - date) / 1000);
+        
+        if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+        return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    }
+    
+    function exportSystemReport() {
+        showNotification('System report export feature coming soon!', 'info');
+    }
+    
+    function openSystemSettings() {
+        showNotification('System settings feature coming soon!', 'info');
+    }
+
+    // Close modals on outside click
+    document.addEventListener('click', function(e) {
+        if (e.target.id === 'addEntryModal') {
+            closeAddEntryModal();
+        }
+        if (e.target.id === 'passwordModal') {
+            closePasswordModal();
+        }
+        if (e.target.id === 'userManagementModal') {
+            closeUserManagementModal();
+        }
+        if (e.target.id === 'addUserModal') {
+            closeAddUserModal();
+        }
+        if (e.target.id === 'editUserModal') {
+            closeEditUserModal();
+        }
+        if (e.target.id === 'auditLogsModal') {
+            closeAuditLogsModal();
+        }
+        if (e.target.id === 'credentialTypesModal') {
+            closeCredentialTypesModal();
+        }
+        if (e.target.id === 'addCredentialTypeModal') {
+            closeAddCredentialTypeModal();
+        }
+        if (e.target.id === 'editCredentialTypeModal') {
+            closeEditCredentialTypeModal();
+        }
+        if (e.target.id === 'adminOverviewModal') {
+            closeAdminOverviewModal();
+        }
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeAddEntryModal();
+            closePasswordModal();
+            closeUserManagementModal();
+            closeAddUserModal();
+            closeEditUserModal();
+            closeAuditLogsModal();
+            closeCredentialTypesModal();
+            closeAddCredentialTypeModal();
+            closeEditCredentialTypeModal();
+            closeAdminOverviewModal();
+        }
+        {% if can_edit %}
+        if (e.ctrlKey && e.key === 'n') {
+            e.preventDefault();
+            openAddEntryModal();
+        }
+        {% endif %}
+    });
+    
+    // Add credential type form submission
+    document.getElementById('addCredentialTypeForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const typeData = {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            icon: formData.get('icon'),
+            color: formData.get('color')
+        };
+        
+        fetch('/ajax/credential-type/create/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify(typeData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                closeAddCredentialTypeModal();
+                loadCredentialTypes(); // Refresh the list
+            } else {
+                showNotification(data.error || 'Failed to create credential type', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('An unexpected error occurred', 'error');
+        });
+    });
+    
+    // Edit credential type form submission
+    document.getElementById('editCredentialTypeForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const typeId = formData.get('type_id');
+        const typeData = {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            icon: formData.get('icon'),
+            color: formData.get('color')
+        };
+        
+        fetch(`/ajax/credential-type/${typeId}/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify(typeData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                closeEditCredentialTypeModal();
+                loadCredentialTypes(); // Refresh the list
+            } else {
+                showNotification(data.error || 'Failed to update credential type', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('An unexpected error occurred', 'error');
+        });
+    });
+    
+    // Initialize color sync for edit modal when opened
+    document.addEventListener('DOMContentLoaded', function() {
+        // Sync color inputs for add form when page loads
+        syncColorInputs('addCredentialTypeForm');
+        
+        // Sync for edit form will be done when modal opens
+        const editModal = document.getElementById('editCredentialTypeModal');
+        
+        // Check URL parameters for modal to open
+        const urlParams = new URLSearchParams(window.location.search);
+        const modalParam = urlParams.get('modal');
+        
+        if (modalParam) {
+            switch(modalParam) {
+                case 'admin_overview':
+                    setTimeout(() => openAdminOverviewModal(), 100);
+                    break;
+                case 'user_management':
+                    setTimeout(() => openUserManagementModal(), 100);
+                    break;
+                case 'audit_logs':
+                    setTimeout(() => openAuditLogsModal(), 100);
+                    break;
+                case 'credential_types':
+                    setTimeout(() => openCredentialTypesModal(), 100);
+                    break;
+            }
+            // Remove the modal parameter from URL without reloading
+            const newUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, document.title, newUrl);
+        }
+        if (editModal) {
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                        if (editModal.style.display === 'flex') {
+                            setTimeout(() => syncColorInputs('editCredentialTypeForm'), 100);
+                        }
+                    }
+                });
+            });
+            observer.observe(editModal, { attributes: true });
+        }
+    });
+</script>
+{% endblock %}

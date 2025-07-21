@@ -1,0 +1,408 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Menshen PAM{% endblock %}
+
+{% block header %}Dashboard{% endblock %}
+
+{% block header_actions %}
+    {% if can_edit %}
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addEntryModal">
+            <i class="bi bi-plus-circle me-1"></i>
+            Add Entry
+        </button>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Total Entries</h5>
+                            <h2 class="mb-0">{{ total_entries }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-key-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Credential Types</h5>
+                            <h2 class="mb-0">{{ credential_types|length }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-tags-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Your Access</h5>
+                            <h2 class="mb-0">{% if can_edit %}Read/Write{% else %}Read Only{% endif %}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-person-check-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Recent Access</h5>
+                            <h2 class="mb-0">{{ recent_activity|length }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-clock-history fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" id="searchInput" placeholder="Search vault entries...">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="typeFilter">
+                <option value="">All Types</option>
+                {% for cred_type in credential_types %}
+                    <option value="{{ cred_type.name }}">{{ cred_type.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="sortFilter">
+                <option value="-updated_at">Recently Updated</option>
+                <option value="name">Name A-Z</option>
+                <option value="-name">Name Z-A</option>
+                <option value="-created_at">Recently Created</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Vault Entries -->
+    <div class="row">
+        <div class="col-lg-8">
+            <h4>Vault Entries</h4>
+            {% if page_obj %}
+                <div class="row" id="vaultEntries">
+                    {% for entry in page_obj %}
+                        <div class="col-md-6 mb-3 vault-entry" 
+                             data-name="{{ entry.name|lower }}" 
+                             data-type="{{ entry.credential_type.name }}"
+                             data-updated="{{ entry.updated_at|date:'c' }}">
+                            <div class="card vault-entry-card h-100">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h5 class="card-title mb-0">{{ entry.name }}</h5>
+                                        <span class="badge bg-secondary">{{ entry.credential_type.name }}</span>
+                                    </div>
+                                    <p class="card-text text-muted mb-2">
+                                        <i class="bi bi-person me-1"></i>{{ entry.username }}
+                                    </p>
+                                    {% if entry.url %}
+                                        <p class="card-text text-muted mb-2">
+                                            <i class="bi bi-link me-1"></i>
+                                            <a href="{{ entry.url }}" target="_blank" class="text-decoration-none">{{ entry.url|truncatechars:30 }}</a>
+                                        </p>
+                                    {% endif %}
+                                    {% if entry.notes %}
+                                        <p class="card-text small text-muted mb-2">{{ entry.notes|truncatechars:50 }}</p>
+                                    {% endif %}
+                                    <div class="d-flex justify-content-between align-items-center mt-3">
+                                        <small class="text-muted">
+                                            Updated {{ entry.updated_at|timesince }} ago
+                                        </small>
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-primary" 
+                                                    onclick="viewPassword({{ entry.id }}, '{{ entry.name|escapejs }}')">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            {% if can_edit %}
+                                                <button type="button" class="btn btn-outline-secondary" 
+                                                        onclick="editEntry({{ entry.id }})">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Pagination -->
+                {% if page_obj.has_other_pages %}
+                    <nav aria-label="Vault entries pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                                </li>
+                            {% endif %}
+                            
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ num }}</span>
+                                    </li>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-key display-1 text-muted"></i>
+                    <h3 class="mt-3">No vault entries found</h3>
+                    <p class="text-muted">{% if can_edit %}Add your first vault entry to get started.{% else %}Contact your administrator to add vault entries.{% endif %}</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Recent Activity Sidebar -->
+        <div class="col-lg-4">
+            <h4>Recent Activity</h4>
+            {% if recent_activity %}
+                <div class="list-group">
+                    {% for log in recent_activity %}
+                        <div class="list-group-item access-log">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ log.vault_entry.name }}</h6>
+                                <small>{{ log.timestamp|timesince }} ago</small>
+                            </div>
+                            <p class="mb-1">{{ log.access_type }} access</p>
+                            <small class="text-muted">{{ log.ip_address|default:"Unknown IP" }}</small>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-muted">No recent activity</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add Entry Modal -->
+    {% if can_edit %}
+    <div class="modal fade" id="addEntryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Vault Entry</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="addEntryForm">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="entryName" class="form-label">Name *</label>
+                            <input type="text" class="form-control" id="entryName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="entryUsername" class="form-label">Username *</label>
+                            <input type="text" class="form-control" id="entryUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="entryPassword" class="form-label">Password *</label>
+                            <input type="password" class="form-control" id="entryPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="entryType" class="form-label">Credential Type *</label>
+                            <select class="form-select" id="entryType" required>
+                                <option value="">Select type...</option>
+                                {% for cred_type in credential_types %}
+                                    <option value="{{ cred_type.id }}">{{ cred_type.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="entryUrl" class="form-label">URL</label>
+                            <input type="url" class="form-control" id="entryUrl">
+                        </div>
+                        <div class="mb-3">
+                            <label for="entryNotes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="entryNotes" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Entry</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Password View Modal -->
+    <div class="modal fade" id="passwordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="passwordModalTitle">View Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Password:</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control password-field" id="passwordDisplay" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword()">
+                                <i class="bi bi-eye" id="passwordToggleIcon"></i>
+                            </button>
+                            <button class="btn btn-outline-primary" type="button" onclick="copyPassword()">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Search and filter functionality
+    document.getElementById('searchInput').addEventListener('input', filterEntries);
+    document.getElementById('typeFilter').addEventListener('change', filterEntries);
+    document.getElementById('sortFilter').addEventListener('change', sortEntries);
+    
+    function filterEntries() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const typeFilter = document.getElementById('typeFilter').value;
+        const entries = document.querySelectorAll('.vault-entry');
+        
+        entries.forEach(entry => {
+            const name = entry.getAttribute('data-name');
+            const type = entry.getAttribute('data-type');
+            
+            const matchesSearch = name.includes(searchTerm);
+            const matchesType = !typeFilter || type === typeFilter;
+            
+            entry.style.display = matchesSearch && matchesType ? 'block' : 'none';
+        });
+    }
+    
+    function sortEntries() {
+        const sortBy = document.getElementById('sortFilter').value;
+        const container = document.getElementById('vaultEntries');
+        const entries = Array.from(container.children);
+        
+        entries.sort((a, b) => {
+            let aVal, bVal;
+            
+            if (sortBy.includes('name')) {
+                aVal = a.getAttribute('data-name');
+                bVal = b.getAttribute('data-name');
+            } else {
+                aVal = new Date(a.getAttribute('data-updated'));
+                bVal = new Date(b.getAttribute('data-updated'));
+            }
+            
+            if (sortBy.startsWith('-')) {
+                return aVal > bVal ? -1 : 1;
+            } else {
+                return aVal < bVal ? -1 : 1;
+            }
+        });
+        
+        entries.forEach(entry => container.appendChild(entry));
+    }
+    
+    // Password viewing functionality
+    function viewPassword(entryId, entryName) {
+        document.getElementById('passwordModalTitle').textContent = `Password for ${entryName}`;
+        
+        // This would normally make an API call to get the password
+        // For demo purposes, we'll show a placeholder
+        document.getElementById('passwordDisplay').value = '••••••••••';
+        
+        const modal = new bootstrap.Modal(document.getElementById('passwordModal'));
+        modal.show();
+        
+        // Simulate API call (replace with actual implementation)
+        console.log('Would fetch password for entry ID:', entryId);
+    }
+    
+    function togglePassword() {
+        const passwordField = document.getElementById('passwordDisplay');
+        const toggleIcon = document.getElementById('passwordToggleIcon');
+        
+        if (passwordField.type === 'password') {
+            passwordField.type = 'text';
+            toggleIcon.className = 'bi bi-eye-slash';
+        } else {
+            passwordField.type = 'password';
+            toggleIcon.className = 'bi bi-eye';
+        }
+    }
+    
+    function copyPassword() {
+        const passwordField = document.getElementById('passwordDisplay');
+        passwordField.select();
+        document.execCommand('copy');
+        
+        // Show feedback
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i>';
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
+    }
+    
+    // Add entry form functionality
+    {% if can_edit %}
+    document.getElementById('addEntryForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // This would normally make an API call to create the entry
+        // For demo purposes, we'll just show an alert
+        alert('Entry would be created (API integration needed)');
+        
+        // Close modal and reset form
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addEntryModal'));
+        modal.hide();
+        this.reset();
+    });
+    {% endif %}
+</script>
+{% endblock %}
