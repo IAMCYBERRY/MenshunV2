@@ -18,7 +18,7 @@ from .views import (
     # Role management endpoints
     entra_user_roles, entra_available_roles, entra_assign_role, entra_remove_role, entra_role_members,
     # Cloud admin management
-    cloud_admins, create_test_admin_logs
+    cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account
 )
 
 # Create a router for DRF ViewSets
@@ -91,4 +91,8 @@ urlpatterns = [
     path('ajax/entra-role-members/<str:role_id>/', entra_role_members, name='ajax_entra_role_members'),
     path('ajax/cloud-admins/', cloud_admins, name='ajax_cloud_admins'),
     path('ajax/create-test-admin-logs/', create_test_admin_logs, name='ajax_create_test_admin_logs'),
+    path('ajax/admin-details/<str:username>/', admin_details, name='ajax_admin_details'),
+    path('ajax/admin-reset-password/<str:username>/', reset_admin_password, name='ajax_reset_admin_password'),
+    path('ajax/admin-toggle-account/<str:username>/', toggle_admin_account, name='ajax_toggle_admin_account'),
+    path('ajax/admin-update-account/<str:username>/', update_admin_account, name='ajax_update_admin_account'),
 ]

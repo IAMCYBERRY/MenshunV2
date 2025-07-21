@@ -354,6 +354,44 @@ class EntraUserManager:
         """Enable a user account in Entra ID"""
         return self.update_user(user_id, {"accountEnabled": True})
     
+    def reset_user_password(self, user_id: str, new_password: str = None) -> Dict[str, Any]:
+        """Reset a user's password in Entra ID"""
+        try:
+            import secrets
+            import string
+            
+            # Generate a strong password if not provided
+            if not new_password:
+                alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+                new_password = ''.join(secrets.choice(alphabet) for i in range(16))
+            
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/users/{user_id}"
+            
+            password_data = {
+                "passwordProfile": {
+                    "forceChangePasswordNextSignIn": True,
+                    "password": new_password
+                }
+            }
+            
+            response = requests.patch(url, headers=headers, json=password_data)
+            response.raise_for_status()
+            
+            logger.info(f"Successfully reset password for Entra user: {user_id}")
+            return {
+                'success': True,
+                'password': new_password,
+                'message': 'Password reset successfully'
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to reset password for Entra user {user_id}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to reset password: {str(e)}'
+            }
+    
     def delete_user(self, user_id: str) -> bool:
         """Delete a user from Entra ID (soft delete)"""
         try:

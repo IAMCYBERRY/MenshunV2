@@ -3652,15 +3652,25 @@
             '<div style="max-height: 400px; overflow-y: auto;">' +
                 (accounts.length > 0 ? 
                     accounts.map(account => 
-                        '<div style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 8px;">' +
+                        '<div onclick="openAdminDetailsModal(\'' + account.username + '\')" style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease;" ' +
+                        'onmouseover="this.style.background=\'rgba(51, 65, 85, 0.6)\'; this.style.borderColor=\'rgba(14, 165, 233, 0.5)\'" ' +
+                        'onmouseout="this.style.background=\'rgba(51, 65, 85, 0.4)\'; this.style.borderColor=\'rgba(71, 85, 105, 0.3)\'">' +
                             '<div style="display: flex; justify-content: space-between; align-items: center;">' +
                                 '<div>' +
-                                    '<div style="color: white; font-weight: 600;">' + (account.username || account.account_name || 'Unknown') + '</div>' +
-                                    '<div style="color: #94a3b8; font-size: 14px;">' + (account.platform || 'Unknown') + ' • Created ' + (account.created_date || 'Unknown') + '</div>' +
+                                    '<div style="color: white; font-weight: 600; display: flex; align-items: center; gap: 8px;">' + 
+                                        '<i class="ph ph-' + (account.platform === 'Entra' ? 'microsoft-logo' : 'server') + '" style="color: ' + (account.platform === 'Entra' ? '#0ea5e9' : '#10b981') + ';"></i>' +
+                                        (account.username || account.account_name || 'Unknown') + 
+                                    '</div>' +
+                                    '<div style="color: #94a3b8; font-size: 14px;">' + (account.platform || 'Unknown') + ' • Created ' + (account.created_date || 'Unknown') + 
+                                        (account.has_vault_entry ? ' • <span style="color: #10b981;"><i class="ph ph-key" style="margin-right: 4px;"></i>In Vault</span>' : ' • <span style="color: #f59e0b;"><i class="ph ph-warning" style="margin-right: 4px;"></i>No Vault Entry</span>') +
+                                    '</div>' +
                                 '</div>' +
-                                '<div style="padding: 4px 8px; border-radius: 4px; font-size: 12px; ' + 
-                                    (account.status === 'enabled' ? 'background: rgba(16, 185, 129, 0.2); color: #10b981;' : 'background: rgba(239, 68, 68, 0.2); color: #ef4444;') + '">' +
-                                    (account.status || 'unknown') +
+                                '<div style="display: flex; align-items: center; gap: 8px;">' +
+                                    '<div style="padding: 4px 8px; border-radius: 4px; font-size: 12px; ' + 
+                                        (account.status === 'enabled' ? 'background: rgba(16, 185, 129, 0.2); color: #10b981;' : 'background: rgba(239, 68, 68, 0.2); color: #ef4444;') + '">' +
+                                        (account.status || 'unknown') +
+                                    '</div>' +
+                                    '<i class="ph ph-caret-right" style="color: #94a3b8; font-size: 16px;"></i>' +
                                 '</div>' +
                             '</div>' +
                         '</div>'
@@ -3691,6 +3701,384 @@
         return cookieValue;
     }
 
+    function openAdminDetailsModal(username) {
+        console.log('Opening admin details for:', username);
+        
+        // Create admin details modal
+        const detailsModal = document.createElement('div');
+        detailsModal.id = 'adminDetailsModal';
+        detailsModal.style.cssText = `
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: rgba(0, 0, 0, 0.9); 
+            z-index: 9999999; 
+            display: flex; 
+            align-items: flex-start; 
+            justify-content: center; 
+            padding: 32px;
+            overflow-y: auto;
+            backdrop-filter: blur(12px);
+        `;
+        
+        detailsModal.innerHTML = `
+            <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 12px; padding: 32px; backdrop-filter: blur(8px); width: 100%; max-width: 1000px; margin: 32px 0; max-height: calc(100vh - 4rem); overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+                    <h3 style="font-size: 24px; font-weight: 800; color: white; display: flex; align-items: center; gap: 12px;">
+                        <i class="ph ph-user-gear" style="color: #0ea5e9;"></i>
+                        Admin Details
+                        <span style="font-size: 16px; font-weight: 500; color: #94a3b8;">• ${username}</span>
+                    </h3>
+                    <button type="button" onclick="closeAdminDetailsModal()" style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; padding: 8px;">
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+                
+                <!-- Loading State -->
+                <div id="adminDetailsLoading" style="text-align: center; color: #94a3b8; padding: 64px;">
+                    <i class="ph ph-spinner" style="font-size: 48px; animation: spin 1s linear infinite; margin-bottom: 16px; display: block;"></i>
+                    <div style="font-size: 18px;">Loading admin details...</div>
+                    <div style="font-size: 14px; margin-top: 8px;">Fetching Entra properties and role assignments</div>
+                </div>
+                
+                <!-- Details Content (will be populated) -->
+                <div id="adminDetailsContent" style="display: none;"></div>
+            </div>
+        `;
+        
+        document.body.appendChild(detailsModal);
+        
+        // Add close function
+        window.closeAdminDetailsModal = function() {
+            detailsModal.remove();
+        };
+        
+        // Load admin details
+        loadAdminDetails(username);
+    }
+    
+    function loadAdminDetails(username) {
+        console.log('Loading details for admin:', username);
+        
+        // Fetch admin details from backend
+        fetch('/ajax/admin-details/' + encodeURIComponent(username) + '/')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Admin details loaded:', data);
+                displayAdminDetails(data);
+            })
+            .catch(error => {
+                console.error('Error loading admin details:', error);
+                displayAdminDetailsError('Failed to load admin details');
+            });
+    }
+    
+    function displayAdminDetails(adminData) {
+        const loadingDiv = document.getElementById('adminDetailsLoading');
+        const contentDiv = document.getElementById('adminDetailsContent');
+        
+        if (!contentDiv) return;
+        
+        // Hide loading, show content
+        loadingDiv.style.display = 'none';
+        contentDiv.style.display = 'block';
+        
+        const user = adminData.user || {};
+        const roles = adminData.roles || [];
+        const groups = adminData.groups || [];
+        
+        contentDiv.innerHTML = `
+            <!-- Admin Overview -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
+                <div style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 20px;">
+                    <h4 style="color: white; font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-user" style="color: #0ea5e9;"></i>
+                        User Properties
+                    </h4>
+                    <div style="display: grid; gap: 12px;">
+                        <div><span style="color: #94a3b8; font-size: 14px;">Display Name:</span> <span style="color: white;">${user.displayName || 'N/A'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">Email:</span> <span style="color: white;">${user.mail || 'N/A'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">UPN:</span> <span style="color: white;">${user.userPrincipalName || 'N/A'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">Job Title:</span> <span style="color: white;">${user.jobTitle || 'N/A'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">Department:</span> <span style="color: white;">${user.department || 'N/A'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">Account Enabled:</span> 
+                            <span style="color: ${user.accountEnabled ? '#10b981' : '#ef4444'};">
+                                <i class="ph ph-${user.accountEnabled ? 'check-circle' : 'x-circle'}"></i>
+                                ${user.accountEnabled ? 'Yes' : 'No'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 20px;">
+                    <h4 style="color: white; font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-shield-check" style="color: #10b981;"></i>
+                        Account Status
+                    </h4>
+                    <div style="display: grid; gap: 12px;">
+                        <div><span style="color: #94a3b8; font-size: 14px;">Created:</span> <span style="color: white;">${user.createdDateTime ? new Date(user.createdDateTime).toLocaleString() : 'N/A'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">Last Sign-In:</span> <span style="color: white;">${user.signInActivity?.lastSignInDateTime ? new Date(user.signInActivity.lastSignInDateTime).toLocaleString() : 'Never'}</span></div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">MFA Status:</span> 
+                            <span style="color: ${user.strongAuthenticationMethods?.length > 0 ? '#10b981' : '#f59e0b'};">
+                                ${user.strongAuthenticationMethods?.length > 0 ? 'Enabled' : 'Not Configured'}
+                            </span>
+                        </div>
+                        <div><span style="color: #94a3b8; font-size: 14px;">Risk Level:</span> 
+                            <span style="color: #0ea5e9;">Low</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Role Assignments -->
+            <div style="margin-bottom: 32px;">
+                <h4 style="color: white; font-size: 18px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                    <i class="ph ph-crown" style="color: #f59e0b;"></i>
+                    Role Assignments (${roles.length})
+                </h4>
+                <div style="display: grid; gap: 12px; max-height: 300px; overflow-y: auto;">
+                    ${roles.length > 0 ? roles.map(role => `
+                        <div style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 6px; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="color: white; font-weight: 600;">${role.roleDefinition?.displayName || role.displayName || 'Unknown Role'}</div>
+                                <div style="color: #94a3b8; font-size: 14px;">${role.roleDefinition?.description || 'No description available'}</div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; ${role.assignmentType === 'Eligible' ? 'background: rgba(245, 158, 11, 0.2); color: #f59e0b;' : 'background: rgba(16, 185, 129, 0.2); color: #10b981;'}"">
+                                    ${role.assignmentType || 'Permanent'}
+                                </span>
+                                <button onclick="editRoleAssignment('${role.id}')" style="background: none; border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 4px; color: #94a3b8; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                                    <i class="ph ph-gear"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('') : 
+                    `<div style="text-align: center; color: #94a3b8; padding: 32px;">
+                        <i class="ph ph-crown" style="font-size: 32px; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                        No role assignments found
+                    </div>`}
+                </div>
+            </div>
+            
+            <!-- Group Memberships -->
+            <div style="margin-bottom: 32px;">
+                <h4 style="color: white; font-size: 18px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                    <i class="ph ph-users-three" style="color: #7c3aed;"></i>
+                    Group Memberships (${groups.length})
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">
+                    ${groups.length > 0 ? groups.map(group => `
+                        <div style="background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 6px; padding: 12px;">
+                            <div style="color: white; font-weight: 600; margin-bottom: 4px;">${group.displayName || 'Unknown Group'}</div>
+                            <div style="color: #94a3b8; font-size: 14px;">${group.description || 'No description'}</div>
+                        </div>
+                    `).join('') : 
+                    `<div style="text-align: center; color: #94a3b8; padding: 32px; grid-column: 1 / -1;">
+                        <i class="ph ph-users-three" style="font-size: 32px; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                        No group memberships found
+                    </div>`}
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid rgba(71, 85, 105, 0.3); padding-top: 20px;">
+                <button onclick="resetAdminPassword('${user.userPrincipalName}')" style="padding: 10px 20px; background: #f59e0b; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500;">
+                    <i class="ph ph-key" style="margin-right: 6px;"></i>
+                    Reset Password
+                </button>
+                <button onclick="editAdminAccount('${user.userPrincipalName}')" style="padding: 10px 20px; background: #0ea5e9; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500;">
+                    <i class="ph ph-pencil" style="margin-right: 6px;"></i>
+                    Edit Account
+                </button>
+                <button onclick="toggleAdminAccount('${user.userPrincipalName}', ${!user.accountEnabled})" style="padding: 10px 20px; background: ${user.accountEnabled ? '#ef4444' : '#10b981'}; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500;">
+                    <i class="ph ph-${user.accountEnabled ? 'lock' : 'unlock'}" style="margin-right: 6px;"></i>
+                    ${user.accountEnabled ? 'Disable' : 'Enable'} Account
+                </button>
+            </div>
+        `;
+    }
+    
+    function displayAdminDetailsError(message) {
+        const loadingDiv = document.getElementById('adminDetailsLoading');
+        if (loadingDiv) {
+            loadingDiv.innerHTML = `
+                <div style="text-align: center; color: #ef4444; padding: 64px;">
+                    <i class="ph ph-warning-circle" style="font-size: 48px; margin-bottom: 16px; display: block;"></i>
+                    <div style="font-size: 18px;">${message}</div>
+                    <button onclick="closeAdminDetailsModal()" style="margin-top: 20px; padding: 10px 20px; background: rgba(71, 85, 105, 0.3); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 6px; color: white; cursor: pointer;">
+                        Close
+                    </button>
+                </div>
+            `;
+        }
+    }
+    
+    // Admin action functions (placeholders for now)
+    function resetAdminPassword(userPrincipalName) {
+        if (!confirm(`Are you sure you want to reset the password for ${userPrincipalName}? This will force the user to change their password on next login.`)) {
+            return;
+        }
+        
+        showNotification('Resetting password...', 'info');
+        
+        fetch(`/ajax/admin-reset-password/${encodeURIComponent(userPrincipalName)}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(`Password reset successfully! New password: ${data.new_password}`, 'success');
+                
+                // Create a temporary password display modal
+                const passwordModal = document.createElement('div');
+                passwordModal.id = 'passwordDisplayModal';
+                passwordModal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                `;
+                
+                passwordModal.innerHTML = `
+                    <div style="
+                        background: #1e293b;
+                        padding: 30px;
+                        border-radius: 12px;
+                        border: 1px solid #0ea5e9;
+                        max-width: 500px;
+                        width: 90%;
+                        text-align: center;
+                    ">
+                        <h3 style="color: #0ea5e9; margin-bottom: 20px;">
+                            <i class="ph ph-key" style="margin-right: 10px;"></i>
+                            Password Reset Successful
+                        </h3>
+                        <p style="color: #cbd5e1; margin-bottom: 20px;">
+                            New password for <strong>${userPrincipalName}</strong>:
+                        </p>
+                        <div style="
+                            background: #0f172a;
+                            padding: 15px;
+                            border-radius: 8px;
+                            border: 1px solid #334155;
+                            font-family: monospace;
+                            font-size: 16px;
+                            color: #10b981;
+                            margin-bottom: 20px;
+                            cursor: pointer;
+                        " onclick="copyToClipboard('${data.new_password}')">
+                            ${data.new_password}
+                            <br><small style="color: #64748b;">Click to copy</small>
+                        </div>
+                        <p style="color: #f59e0b; margin-bottom: 20px; font-size: 14px;">
+                            ⚠️ User must change password on next login
+                        </p>
+                        <button onclick="document.getElementById('passwordDisplayModal').remove()" style="
+                            background: #0ea5e9;
+                            color: white;
+                            border: none;
+                            padding: 10px 20px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 500;
+                        ">Close</button>
+                    </div>
+                `;
+                
+                document.body.appendChild(passwordModal);
+            } else {
+                showNotification(`Failed to reset password: ${data.error}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error resetting password:', error);
+            showNotification('Failed to reset password', 'error');
+        });
+    }
+    
+    function editAdminAccount(userPrincipalName) {
+        console.log('Edit Admin Account clicked for:', userPrincipalName);
+        showNotification('Loading account details...', 'info');
+        
+        // Get current user details first
+        fetch(`/ajax/admin-details/${encodeURIComponent(userPrincipalName)}/`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => {
+            console.log('Admin details response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Admin details data:', data);
+            if (data.success) {
+                const user = data.user;
+                showEditAdminModal(userPrincipalName, user);
+            } else {
+                showNotification(`Failed to load user details: ${data.error}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading user details:', error);
+            showNotification('Failed to load user details', 'error');
+        });
+    }
+    
+    function toggleAdminAccount(userPrincipalName, enable) {
+        const action = enable ? 'enable' : 'disable';
+        
+        if (!confirm(`Are you sure you want to ${action} the account for ${userPrincipalName}?`)) {
+            return;
+        }
+        
+        showNotification(`${action === 'enable' ? 'Enabling' : 'Disabling'} account...`, 'info');
+        
+        fetch(`/ajax/admin-toggle-account/${encodeURIComponent(userPrincipalName)}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ enable: enable })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(`Account ${action}d successfully!`, 'success');
+                // Refresh admin details if modal is open
+                const adminDetailsModal = document.getElementById('adminDetailsModal');
+                if (adminDetailsModal) {
+                    openAdminDetailsModal(userPrincipalName);
+                }
+            } else {
+                showNotification(`Failed to ${action} account: ${data.error}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error(`Error ${action}ing account:`, error);
+            showNotification(`Failed to ${action} account`, 'error');
+        });
+    }
+    
+    function editRoleAssignment(roleId) {
+        showNotification('Role assignment editing coming soon!', 'info');
+    }
+    
     function createTestAdminLogs() {
         console.log('Creating test admin logs...');
         
@@ -3721,6 +4109,171 @@
         .catch(error => {
             console.error('Error creating test data:', error);
             showNotification('Error creating test data', 'error');
+        });
+    }
+    
+    function showEditAdminModal(userPrincipalName, userData) {
+        const editModal = document.createElement('div');
+        editModal.id = 'editAdminModal';
+        editModal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+        
+        editModal.innerHTML = `
+            <div style="
+                background: #1e293b;
+                padding: 30px;
+                border-radius: 12px;
+                border: 1px solid #0ea5e9;
+                max-width: 600px;
+                width: 90%;
+                max-height: 80vh;
+                overflow-y: auto;
+            ">
+                <h3 style="color: #0ea5e9; margin-bottom: 20px;">
+                    <i class="ph ph-user-gear" style="margin-right: 10px;"></i>
+                    Edit Admin Account: ${userPrincipalName}
+                </h3>
+                
+                <div style="display: grid; gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label style="color: #cbd5e1; display: block; margin-bottom: 5px; font-weight: 500;">Display Name</label>
+                        <input type="text" id="editDisplayName" value="${userData.displayName || ''}" style="
+                            width: 100%;
+                            padding: 10px;
+                            background: #0f172a;
+                            border: 1px solid #334155;
+                            border-radius: 6px;
+                            color: #cbd5e1;
+                            font-size: 14px;
+                        ">
+                    </div>
+                    
+                    <div>
+                        <label style="color: #cbd5e1; display: block; margin-bottom: 5px; font-weight: 500;">Job Title</label>
+                        <input type="text" id="editJobTitle" value="${userData.jobTitle || ''}" style="
+                            width: 100%;
+                            padding: 10px;
+                            background: #0f172a;
+                            border: 1px solid #334155;
+                            border-radius: 6px;
+                            color: #cbd5e1;
+                            font-size: 14px;
+                        ">
+                    </div>
+                    
+                    <div>
+                        <label style="color: #cbd5e1; display: block; margin-bottom: 5px; font-weight: 500;">Department</label>
+                        <input type="text" id="editDepartment" value="${userData.department || ''}" style="
+                            width: 100%;
+                            padding: 10px;
+                            background: #0f172a;
+                            border: 1px solid #334155;
+                            border-radius: 6px;
+                            color: #cbd5e1;
+                            font-size: 14px;
+                        ">
+                    </div>
+                    
+                    <div>
+                        <label style="color: #cbd5e1; display: block; margin-bottom: 5px; font-weight: 500;">Office Location</label>
+                        <input type="text" id="editOfficeLocation" value="${userData.officeLocation || ''}" style="
+                            width: 100%;
+                            padding: 10px;
+                            background: #0f172a;
+                            border: 1px solid #334155;
+                            border-radius: 6px;
+                            color: #cbd5e1;
+                            font-size: 14px;
+                        ">
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="document.getElementById('editAdminModal').remove()" style="
+                        background: #6b7280;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-weight: 500;
+                    ">Cancel</button>
+                    <button onclick="saveAdminAccountChanges('${userPrincipalName}')" style="
+                        background: #0ea5e9;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-weight: 500;
+                    ">Save Changes</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(editModal);
+    }
+    
+    function saveAdminAccountChanges(userPrincipalName) {
+        const updateData = {
+            displayName: document.getElementById('editDisplayName').value.trim(),
+            jobTitle: document.getElementById('editJobTitle').value.trim(),
+            department: document.getElementById('editDepartment').value.trim(),
+            officeLocation: document.getElementById('editOfficeLocation').value.trim()
+        };
+        
+        // Remove empty values
+        Object.keys(updateData).forEach(key => {
+            if (!updateData[key]) {
+                delete updateData[key];
+            }
+        });
+        
+        showNotification('Updating account...', 'info');
+        
+        fetch(`/ajax/admin-update-account/${encodeURIComponent(userPrincipalName)}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(updateData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Account updated successfully!', 'success');
+                document.getElementById('editAdminModal').remove();
+                // Refresh admin details if modal is open
+                const adminDetailsModal = document.getElementById('adminDetailsModal');
+                if (adminDetailsModal) {
+                    openAdminDetailsModal(userPrincipalName);
+                }
+            } else {
+                showNotification(`Failed to update account: ${data.error}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error updating account:', error);
+            showNotification('Failed to update account', 'error');
+        });
+    }
+    
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showNotification('Password copied to clipboard!', 'success');
+        }).catch(() => {
+            showNotification('Failed to copy password', 'error');
         });
     }
     

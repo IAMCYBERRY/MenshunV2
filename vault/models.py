@@ -113,6 +113,12 @@ class VaultEntry(models.Model):
     # Access tracking
     last_accessed = models.DateTimeField(blank=True, null=True)
     access_count = models.PositiveIntegerField(default=0)
+    
+    # Admin account tagging
+    is_admin_account = models.BooleanField(default=False)
+    admin_account_type = models.CharField(max_length=50, blank=True, null=True)  # e.g., 'Entra_admin', 'Proxmox_admin'
+    source_integration = models.CharField(max_length=50, blank=True, null=True)  # e.g., 'Entra', 'Proxmox'
+    tags = models.JSONField(default=list, blank=True)  # Additional flexible tagging
 
     def soft_delete(self, user=None):
         """Soft delete the vault entry"""
@@ -141,6 +147,64 @@ class VaultEntry(models.Model):
             accessed_by=user,
             access_type='VIEW'
         )
+    
+    @classmethod
+    def create_admin_account(cls, username, password, admin_type, integration_source, 
+                           display_name=None, created_by=None, notes=None):
+        """
+        Create a vault entry for an admin account with proper tagging
+        
+        Args:
+            username: The admin account username/email
+            password: The admin account password
+            admin_type: Type of admin account (e.g., 'Entra_admin', 'Proxmox_admin')
+            integration_source: Source integration (e.g., 'Entra', 'Proxmox')
+            display_name: Friendly name for the vault entry
+            created_by: User who created this entry
+            notes: Additional notes
+        """
+        from .models import CredentialType
+        
+        # Get or create the admin credential type
+        admin_cred_type, created = CredentialType.objects.get_or_create(
+            name='Admin Account',
+            defaults={
+                'description': 'Administrative user accounts for various systems'
+            }
+        )
+        
+        # Create the vault entry
+        vault_entry = cls.objects.create(
+            name=display_name or f"{admin_type}: {username}",
+            username=username,
+            password=password,
+            credential_type=admin_cred_type,
+            owner=created_by or cls._get_system_user(),
+            created_by=created_by,
+            notes=notes or f"Auto-generated {admin_type} account",
+            is_admin_account=True,
+            admin_account_type=admin_type,
+            source_integration=integration_source,
+            tags=[admin_type, integration_source, 'auto-generated']
+        )
+        
+        return vault_entry
+    
+    @classmethod
+    def _get_system_user(cls):
+        """Get or create a system user for automated operations"""
+        from .models import CustomUser
+        system_user, created = CustomUser.objects.get_or_create(
+            username='system',
+            defaults={
+                'first_name': 'System',
+                'last_name': 'Account',
+                'email': 'system@menshun.local',
+                'is_active': False,
+                'source': 'system'
+            }
+        )
+        return system_user
 
     def __str__(self):
         return f"{self.name} ({self.credential_type.name})"

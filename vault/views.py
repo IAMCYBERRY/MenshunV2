@@ -1668,16 +1668,41 @@ def entra_create_admin(request):
             }, status=500)
         
         if result['success']:
+            # Create vault entry for the new admin account
+            vault_entry_created = False
+            try:
+                from .models import VaultEntry
+                
+                vault_entry = VaultEntry.create_admin_account(
+                    username=admin_data['userPrincipalName'],
+                    password=result.get('password'),
+                    admin_type='Entra_admin',
+                    integration_source='Entra',
+                    display_name=f"Entra Admin: {admin_data['displayName']}",
+                    created_by=request.user,
+                    notes=f"Auto-created during admin account creation on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                vault_entry_created = True
+            except Exception as e:
+                logger.warning(f"Failed to create vault entry for {admin_data['userPrincipalName']}: {e}")
+                # Continue execution - don't fail the admin creation if vault creation fails
+            
             # Log the creation
             AuditLogger.log_security_event(
                 category='INTEGRATION',
                 action='ADMIN_CREATE',
                 user=request.user,
-                description=f"Created admin account: {admin_data['userPrincipalName']} based on user {admin_data.get('sourceUserId', 'unknown')}",
+                description=f"Created admin account: {admin_data['userPrincipalName']} based on user {admin_data.get('sourceUserId', 'unknown')}" + (
+                    " with vault entry" if vault_entry_created else ""
+                ),
                 request=request,
                 severity='HIGH',
                 success=True,
-                details={'target_user': admin_data['userPrincipalName'], 'source_user_id': admin_data.get('sourceUserId')}
+                details={
+                    'target_user': admin_data['userPrincipalName'], 
+                    'source_user_id': admin_data.get('sourceUserId'),
+                    'vault_entry_created': vault_entry_created
+                }
             )
             
             # Create integration task for tracking
@@ -1698,8 +1723,12 @@ def entra_create_admin(request):
             
             return JsonResponse({
                 'success': True,
-                'message': 'Admin account created successfully',
-                'user_id': result.get('user_id')
+                'message': 'Admin account created successfully' + (
+                    ' with vault entry' if vault_entry_created else ''
+                ),
+                'user_id': result.get('user_id'),
+                'password': result.get('password'),
+                'vault_entry_created': vault_entry_created
             })
         else:
             # Log the failure
@@ -2146,6 +2175,20 @@ def cloud_admins(request):
                     else:
                         display_name = user_identifier.replace('_', ' ')
                 
+                # Check for associated vault entry
+                vault_entry = None
+                has_vault_entry = False
+                try:
+                    from .models import VaultEntry
+                    vault_entry = VaultEntry.objects.filter(
+                        username=user_identifier,
+                        is_admin_account=True,
+                        source_integration__iexact=platform
+                    ).first()
+                    has_vault_entry = vault_entry is not None
+                except Exception as e:
+                    logger.warning(f"Error checking vault entry for {user_identifier}: {e}")
+                
                 admin_data = {
                     'id': f"{platform}_{log.id}",
                     'platform': platform,
@@ -2155,7 +2198,9 @@ def cloud_admins(request):
                     'enabled': enabled,
                     'created_at': log.timestamp.isoformat(),
                     'last_activity': None,  # Would need to track this separately
-                    'created_by': log.user.username if log.user else 'System'
+                    'created_by': log.user.username if log.user else 'System',
+                    'has_vault_entry': has_vault_entry,
+                    'vault_entry_id': vault_entry.id if vault_entry else None
                 }
                 
                 admins.append(admin_data)
@@ -2181,7 +2226,9 @@ def cloud_admins(request):
                 'platform': admin['platform'].title(),
                 'status': 'enabled' if admin.get('enabled', True) else 'disabled',
                 'created_date': admin['created_at'][:10],  # Just the date part
-                'created_by': admin.get('created_by', 'System')
+                'created_by': admin.get('created_by', 'System'),
+                'has_vault_entry': admin.get('has_vault_entry', False),
+                'vault_entry_id': admin.get('vault_entry_id')
             })
         
         return JsonResponse({
@@ -2264,3 +2311,358 @@ def create_test_admin_logs(request):
             'success': False,
             'error': str(e)
         })
+
+@login_required
+def admin_details(request, username):
+    """Get detailed admin account information from Entra ID"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get user details from Entra
+        try:
+            # Get basic user info
+            user = service.user_manager.get_user_by_email(username)
+            if not user:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'User not found: {username}'
+                })
+            
+            # Get role assignments
+            try:
+                roles_data = service.role_manager.get_user_roles(user.get('id', ''))
+                roles = roles_data.get('roles', []) if roles_data.get('success') else []
+            except Exception as e:
+                logger.warning(f"Failed to get roles for {username}: {e}")
+                roles = []
+            
+            # Get group memberships
+            try:
+                groups_data = service.user_manager.get_user_groups(user.get('id', ''))
+                groups = groups_data.get('groups', []) if groups_data.get('success') else []
+            except Exception as e:
+                logger.warning(f"Failed to get groups for {username}: {e}")
+                groups = []
+            
+            # Combine all data
+            admin_details = {
+                'success': True,
+                'user': user,
+                'roles': roles,
+                'groups': groups,
+                'last_updated': timezone.now().isoformat()
+            }
+            
+            return JsonResponse(admin_details)
+            
+        except Exception as e:
+            logger.error(f"Error fetching Entra data for {username}: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to fetch admin details: {str(e)}'
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in admin_details view: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to load admin details'
+        }, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def reset_admin_password(request, username):
+    """Reset an admin account password in Entra ID"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        from .models import SystemAuditLog
+        import json
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get user ID first
+        user_data = service.user_manager.get_user_by_email(username)
+        if not user_data:
+            return JsonResponse({
+                'success': False,
+                'error': f'User not found: {username}'
+            })
+        
+        user_id = user_data.get('id')
+        if not user_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not retrieve user ID'
+            })
+        
+        # Reset password
+        result = service.user_manager.reset_user_password(user_id)
+        
+        if result.get('success'):
+            # Create or update vault entry for this admin account
+            vault_entry_created = False
+            try:
+                from .models import VaultEntry
+                
+                # Check if vault entry already exists for this admin account
+                existing_vault_entry = VaultEntry.objects.filter(
+                    username=username,
+                    is_admin_account=True,
+                    admin_account_type='Entra_admin'
+                ).first()
+                
+                if existing_vault_entry:
+                    # Update existing vault entry with new password
+                    existing_vault_entry.password = result.get('password')
+                    existing_vault_entry.updated_by = request.user
+                    existing_vault_entry.notes = f"Password reset on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    existing_vault_entry.save()
+                    vault_entry_created = True
+                else:
+                    # Create new vault entry
+                    display_name = user.get('displayName', username.split('@')[0])
+                    vault_entry = VaultEntry.create_admin_account(
+                        username=username,
+                        password=result.get('password'),
+                        admin_type='Entra_admin',
+                        integration_source='Entra',
+                        display_name=f"Entra Admin: {display_name}",
+                        created_by=request.user,
+                        notes=f"Created during password reset on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+                    vault_entry_created = True
+                    
+            except Exception as e:
+                logger.warning(f"Failed to create/update vault entry for {username}: {e}")
+                # Continue execution - don't fail the password reset if vault creation fails
+            
+            # Log the activity
+            SystemAuditLog.objects.create(
+                user=request.user,
+                category='Security',
+                action='PASSWORD_RESET',
+                resource=f"Admin Account: {username}",
+                description=f"Password reset for admin account {username}" + (
+                    " and vault entry created/updated" if vault_entry_created else ""
+                ),
+                details={
+                    'user_id': user_id, 
+                    'username': username,
+                    'vault_entry_created': vault_entry_created
+                },
+                severity='Medium',
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+                risk_score=30
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Password reset successfully' + (
+                    ' and vault entry created/updated' if vault_entry_created else ''
+                ),
+                'new_password': result.get('password'),
+                'force_change': True,
+                'vault_entry_created': vault_entry_created
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Password reset failed')
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in reset_admin_password view: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to reset password'
+        }, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def toggle_admin_account(request, username):
+    """Enable or disable an admin account in Entra ID"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        from .models import SystemAuditLog
+        import json
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            enable = data.get('enable', False)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON data'
+            }, status=400)
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get user ID first
+        user_data = service.user_manager.get_user_by_email(username)
+        if not user_data:
+            return JsonResponse({
+                'success': False,
+                'error': f'User not found: {username}'
+            })
+        
+        user_id = user_data.get('id')
+        if not user_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not retrieve user ID'
+            })
+        
+        # Enable or disable user
+        if enable:
+            success = service.user_manager.enable_user(user_id)
+            action = 'ACCOUNT_ENABLED'
+            action_text = 'enabled'
+        else:
+            success = service.user_manager.disable_user(user_id)
+            action = 'ACCOUNT_DISABLED'
+            action_text = 'disabled'
+        
+        if success:
+            # Log the activity
+            SystemAuditLog.objects.create(
+                user=request.user,
+                category='Security',
+                action=action,
+                resource=f"Admin Account: {username}",
+                description=f"Admin account {username} {action_text}",
+                details={'user_id': user_id, 'username': username, 'enabled': enable},
+                severity='High' if not enable else 'Medium',
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+                risk_score=50 if not enable else 25
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Account {action_text} successfully',
+                'enabled': enable
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to {action_text} account'
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in toggle_admin_account view: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to update account status'
+        }, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def update_admin_account(request, username):
+    """Update admin account details in Entra ID"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        from .models import SystemAuditLog
+        import json
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON data'
+            }, status=400)
+        
+        # Check if Entra is configured
+        service = EntraIntegrationService()
+        if not service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra integration is not configured.'
+            }, status=400)
+        
+        # Get user ID first
+        user_data = service.user_manager.get_user_by_email(username)
+        if not user_data:
+            return JsonResponse({
+                'success': False,
+                'error': f'User not found: {username}'
+            })
+        
+        user_id = user_data.get('id')
+        if not user_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not retrieve user ID'
+            })
+        
+        # Prepare update data (only allow certain fields)
+        allowed_fields = ['displayName', 'jobTitle', 'department', 'officeLocation', 'businessPhones']
+        update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
+        
+        if not update_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'No valid fields to update'
+            }, status=400)
+        
+        # Update user
+        success = service.user_manager.update_user(user_id, update_data)
+        
+        if success:
+            # Log the activity
+            SystemAuditLog.objects.create(
+                user=request.user,
+                category='Security',
+                action='ACCOUNT_UPDATED',
+                resource=f"Admin Account: {username}",
+                description=f"Updated admin account {username}",
+                details={'user_id': user_id, 'username': username, 'updated_fields': list(update_data.keys())},
+                severity='Medium',
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+                risk_score=20
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Account updated successfully',
+                'updated_fields': list(update_data.keys())
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to update account'
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in update_admin_account view: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to update account'
+        }, status=500)
