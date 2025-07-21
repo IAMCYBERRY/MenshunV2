@@ -335,6 +335,90 @@
         document.body.style.overflow = 'auto';
     }
 
+    function openIntegrationsModal() {
+        const modal = document.getElementById('integrationsModal');
+        if (!modal) {
+            console.error('Integrations modal not found in DOM');
+            showNotification('Integrations modal not available', 'error');
+            return;
+        }
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadIntegrationOverview();
+    }
+
+    function closeIntegrationsModal() {
+        document.getElementById('integrationsModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function showIntegrationTab(tabName) {
+        // Hide all tab contents
+        document.querySelectorAll('.integration-tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        // Remove active from all tabs
+        document.querySelectorAll('.integration-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Show selected tab content
+        const selectedContent = document.getElementById(`integration${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+        if (selectedContent) {
+            selectedContent.classList.add('active');
+        }
+        
+        // Activate selected tab
+        const selectedTab = document.querySelector(`.integration-tab[data-tab="${tabName}"]`);
+        if (selectedTab) {
+            selectedTab.classList.add('active');
+        }
+        
+        // Load tab-specific content
+        switch(tabName) {
+            case 'overview':
+                loadIntegrationOverview();
+                break;
+            case 'entra':
+                loadEntraConfiguration();
+                break;
+        }
+    }
+
+    function loadIntegrationOverview() {
+        // Simplified version for vault page
+        console.log('Loading integration overview...');
+    }
+
+    function loadEntraConfiguration() {
+        console.log('Loading Entra configuration...');
+    }
+
+    function testEntraConnection() {
+        showNotification('Testing Entra connection...', 'info');
+    }
+
+    function testProxmoxConnection() {
+        showNotification('Proxmox integration coming soon!', 'info');
+    }
+
+    function openEntraUserLookup() {
+        showNotification('Entra user lookup feature coming soon!', 'info');
+    }
+
+    function openEntraUserCreate() {
+        showNotification('Entra user creation feature coming soon!', 'info');
+    }
+
+    function openEntraRoleAssignment() {
+        showNotification('Entra role assignment feature coming soon!', 'info');
+    }
+
+    function openEntraServicePrincipal() {
+        showNotification('Entra service principal management coming soon!', 'info');
+    }
+
     // Load functions (simplified versions for vault page)
     function loadAdminOverview() {
         fetch('/ajax/admin-overview/', {
@@ -452,6 +536,9 @@
                     break;
                 case 'credential_types':
                     setTimeout(() => openCredentialTypesModal(), 100);
+                    break;
+                case 'integrations':
+                    setTimeout(() => openIntegrationsModal(), 100);
                     break;
             }
         }

@@ -2108,7 +2108,13 @@
     // ===============================
     
     function openIntegrationsModal() {
-        document.getElementById('integrationsModal').style.display = 'block';
+        const modal = document.getElementById('integrationsModal');
+        if (!modal) {
+            console.error('Integrations modal not found in DOM');
+            showNotification('Integrations modal not available', 'error');
+            return;
+        }
+        modal.style.display = 'block';
         document.body.style.overflow = 'hidden';
         loadIntegrationOverview();
     }
@@ -2169,11 +2175,16 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Update statistics
-                document.getElementById('totalIntegratedUsers').textContent = data.stats.total_users || 0;
-                document.getElementById('activeIntegrations').textContent = data.stats.active_integrations || 0;
-                document.getElementById('lastSyncTime').textContent = data.stats.last_sync || 'Never';
-                document.getElementById('pendingTasks').textContent = data.stats.pending_tasks || 0;
+                // Update statistics safely
+                const totalUsersEl = document.getElementById('totalIntegratedUsers');
+                const activeIntegrationsEl = document.getElementById('activeIntegrations');
+                const lastSyncEl = document.getElementById('lastSyncTime');
+                const pendingTasksEl = document.getElementById('pendingTasks');
+                
+                if (totalUsersEl) totalUsersEl.textContent = data.stats.total_users || 0;
+                if (activeIntegrationsEl) activeIntegrationsEl.textContent = data.stats.active_integrations || 0;
+                if (lastSyncEl) lastSyncEl.textContent = data.stats.last_sync || 'Never';
+                if (pendingTasksEl) pendingTasksEl.textContent = data.stats.pending_tasks || 0;
                 
                 // Update status indicators
                 updateIntegrationStatus('entra', data.status.entra);
@@ -2182,6 +2193,7 @@
         })
         .catch(error => {
             console.error('Error loading integration overview:', error);
+            // For now, just log the error since the endpoints don't exist yet
         });
     }
     
