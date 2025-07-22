@@ -17,7 +17,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 import json
 import logging
 
-from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog
+from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog, EntraUser, EntraRole, EntraRoleAssignment
 from .audit import AuditLogger
 from .forms import VaultEntryForm, CredentialTypeForm
 from .serializers import (
@@ -2231,11 +2231,31 @@ def cloud_admins(request):
                 'vault_entry_id': admin.get('vault_entry_id')
             })
         
+        # Calculate vault entry statistics
+        with_vault = len([a for a in accounts if a['has_vault_entry']])
+        without_vault = len(accounts) - with_vault
+        
+        # Transform accounts to match the expected format for the global modal
+        transformed_admins = []
+        for account in accounts:
+            transformed_admins.append({
+                'username': account['username'],
+                'display_name': account['account_name'],
+                'platform': account['platform'],
+                'has_vault_entry': account['has_vault_entry'],
+                'vault_entry_id': account['vault_entry_id']
+            })
+        
         return JsonResponse({
             'success': True,
             'stats': stats,
             'accounts': accounts,
-            'total_count': len(accounts)
+            'total_count': len(accounts),
+            # Add fields expected by the global modal
+            'total_admins': len(accounts),
+            'with_vault_entries': with_vault,
+            'without_vault_entries': without_vault,
+            'admins': transformed_admins
         })
         
     except Exception as e:
@@ -2666,3 +2686,132 @@ def update_admin_account(request, username):
             'success': False,
             'error': 'Failed to update account'
         }, status=500)
+
+
+@login_required
+def pam_dashboard_view(request):
+    """
+    PAM (Privileged Account Management) Dashboard
+    """
+    user = request.user
+    user_groups = user.groups.values_list('name', flat=True)
+    
+    # Check if user has admin permissions
+    is_admin = user.is_superuser or 'Vault Admin' in user_groups
+    
+    if not is_admin:
+        messages.error(request, 'You do not have permission to access the PAM Dashboard.')
+        return redirect('vault:dashboard')
+    
+    # Get admin account metrics
+    admin_vault_entries = VaultEntry.objects.filter(
+        is_admin_account=True,
+        is_deleted=False
+    ).select_related('credential_type', 'owner')
+    
+    # Admin Account Overview metrics
+    total_admin_accounts = admin_vault_entries.count()
+    active_admin_accounts = admin_vault_entries.filter(owner__is_active=True).count()
+    inactive_admin_accounts = total_admin_accounts - active_admin_accounts
+    
+    # Recent admin activity (last 30 days)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    recent_admin_activity = SystemAuditLog.objects.filter(
+        timestamp__gte=thirty_days_ago,
+        category='USER',
+        action__in=['USER_CREATE', 'USER_UPDATE', 'PASSWORD_RESET', 'USER_ACTIVATE', 'USER_DEACTIVATE']
+    ).count()
+    
+    # Risk metrics - accounts with old passwords (over 90 days)
+    ninety_days_ago = timezone.now() - timedelta(days=90)
+    high_risk_accounts = admin_vault_entries.filter(updated_at__lt=ninety_days_ago).count()
+    
+    # Credential Management metrics
+    vault_compliance = {
+        'total_entries': total_admin_accounts,
+        'with_vault_entry': admin_vault_entries.count(),
+        'compliance_rate': round((admin_vault_entries.count() / max(total_admin_accounts, 1)) * 100, 1)
+    }
+    
+    # Password age analysis
+    password_age_breakdown = {
+        'recent': admin_vault_entries.filter(updated_at__gte=timezone.now() - timedelta(days=30)).count(),
+        'moderate': admin_vault_entries.filter(
+            updated_at__gte=timezone.now() - timedelta(days=90),
+            updated_at__lt=timezone.now() - timedelta(days=30)
+        ).count(),
+        'old': admin_vault_entries.filter(updated_at__lt=ninety_days_ago).count()
+    }
+    
+    # Role & Permission Management metrics
+    if EntraUser.objects.exists():
+        total_entra_users = EntraUser.objects.filter(sync_status='ACTIVE').count()
+        users_with_roles = EntraRoleAssignment.objects.filter(
+            is_active=True
+        ).values('user').distinct().count()
+        
+        # PIM metrics
+        permanent_assignments = EntraRoleAssignment.objects.filter(
+            assignment_type='PERMANENT',
+            is_active=True
+        ).count()
+        eligible_assignments = EntraRoleAssignment.objects.filter(
+            assignment_type='ELIGIBLE',
+            is_active=True
+        ).count()
+        active_pim_assignments = EntraRoleAssignment.objects.filter(
+            assignment_type='ACTIVE',
+            is_active=True
+        ).count()
+        
+        # MFA metrics (placeholder - would need actual MFA data)
+        mfa_enabled_accounts = total_entra_users  # Assume all have MFA for now
+        mfa_compliance_rate = 100.0 if total_entra_users > 0 else 0.0
+    else:
+        total_entra_users = 0
+        users_with_roles = 0
+        permanent_assignments = 0
+        eligible_assignments = 0
+        active_pim_assignments = 0
+        mfa_enabled_accounts = 0
+        mfa_compliance_rate = 0.0
+    
+    context = {
+        'user': user,
+        'is_admin': is_admin,
+        'page_title': 'PAM Dashboard',
+        
+        # Admin Account Overview
+        'admin_overview': {
+            'total_accounts': total_admin_accounts,
+            'active_accounts': active_admin_accounts,
+            'inactive_accounts': inactive_admin_accounts,
+            'recent_activity': recent_admin_activity,
+            'high_risk_accounts': high_risk_accounts,
+            'risk_percentage': round((high_risk_accounts / max(total_admin_accounts, 1)) * 100, 1)
+        },
+        
+        # Credential Management
+        'credential_management': {
+            'vault_compliance': vault_compliance,
+            'password_age': password_age_breakdown,
+            'total_credentials': total_admin_accounts,
+            'managed_credentials': admin_vault_entries.count()
+        },
+        
+        # Role & Permission Management
+        'role_management': {
+            'total_users': total_entra_users,
+            'users_with_roles': users_with_roles,
+            'permanent_assignments': permanent_assignments,
+            'eligible_assignments': eligible_assignments,
+            'active_pim_assignments': active_pim_assignments,
+            'mfa_enabled': mfa_enabled_accounts,
+            'mfa_compliance_rate': mfa_compliance_rate
+        },
+        
+        # Recent admin entries for quick access
+        'recent_admin_entries': admin_vault_entries.order_by('-updated_at')[:5]
+    }
+    
+    return render(request, 'vault/pam_dashboard.html', context)

@@ -620,6 +620,12 @@
                         </a>
                     </div>
                     <div class="nav-item">
+                        <a href="{% url 'vault:pam_dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'pam_dashboard' %}active{% endif %}">
+                            <i class="ph ph-shield-check"></i>
+                            PAM Dashboard
+                        </a>
+                    </div>
+                    <div class="nav-item">
                         <a href="{% url 'vault:vault_entries' %}" class="nav-link {% if 'vault' in request.resolver_match.url_name %}active{% endif %}">
                             <i class="ph ph-key"></i>
                             Vault Entries
@@ -767,6 +773,157 @@
             </div>
         </main>
     </div>
+    
+    <!-- Global Cloud Admins Modal Script -->
+    <script>
+    function openCloudAdminsModal() {
+        // Create fresh modal element
+        const freshModal = document.createElement('div');
+        freshModal.id = 'freshCloudAdminsModal';
+        freshModal.style.cssText = `
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: rgba(0, 0, 0, 0.8); 
+            z-index: 999999; 
+            display: flex; 
+            align-items: flex-start; 
+            justify-content: center; 
+            padding: 32px;
+            overflow-y: auto;
+            backdrop-filter: blur(8px);
+        `;
+        
+        freshModal.innerHTML = '<div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 12px; padding: 32px; backdrop-filter: blur(8px); width: 100%; max-width: 1200px; margin: 32px 0; max-height: calc(100vh - 4rem); overflow-y: auto;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">' +
+                '<h2 style="color: #fff; font-size: 24px; font-weight: 700; margin: 0;">Cloud Administrators</h2>' +
+                '<button onclick="closeCloudAdminsModal()" style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; padding: 8px; border-radius: 6px; transition: all 0.2s;">' +
+                    '<i class="ph ph-x"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div id="cloudAdminsContent" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">' +
+                '<div style="text-align: center; color: #94a3b8;">' +
+                    '<i class="ph ph-spinner" style="font-size: 48px; animation: spin 1s linear infinite;"></i>' +
+                    '<p style="margin-top: 16px;">Loading administrators...</p>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+        
+        document.body.appendChild(freshModal);
+        
+        // Load cloud admins data
+        fetch('/ajax/cloud-admins/', {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayCloudAdmins(data);
+            } else {
+                showCloudAdminsError(data.error || 'Failed to load administrators');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading cloud admins:', error);
+            showCloudAdminsError('Failed to load administrators');
+        });
+    }
+    
+    function closeCloudAdminsModal() {
+        const modal = document.getElementById('freshCloudAdminsModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+    
+    function displayCloudAdmins(data) {
+        const contentDiv = document.getElementById('cloudAdminsContent');
+        if (!contentDiv) return;
+        
+        let html = '<div style="display: grid; gap: 24px;">';
+        
+        // Summary cards
+        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">';
+        
+        // Total admins
+        html += '<div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Total Admins</div>';
+        html += '<div style="color: #fff; font-size: 32px; font-weight: 700;">' + data.total_admins + '</div>';
+        html += '</div>';
+        
+        // With vault entries
+        html += '<div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">With Vault Entry</div>';
+        html += '<div style="color: #10b981; font-size: 32px; font-weight: 700;">' + data.with_vault_entries + '</div>';
+        html += '</div>';
+        
+        // Without vault entries
+        html += '<div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Without Vault Entry</div>';
+        html += '<div style="color: #f97316; font-size: 32px; font-weight: 700;">' + data.without_vault_entries + '</div>';
+        html += '</div>';
+        
+        html += '</div>';
+        
+        // Admin list
+        if (data.admins && data.admins.length > 0) {
+            html += '<div style="display: grid; gap: 16px;">';
+            data.admins.forEach(admin => {
+                html += '<div onclick="openAdminDetailsModal(\'' + admin.username + '\')" style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s;">';
+                html += '<div style="display: flex; justify-content: space-between; align-items: center;">';
+                html += '<div>';
+                html += '<div style="color: #fff; font-size: 16px; font-weight: 600;">' + admin.display_name + '</div>';
+                html += '<div style="color: #94a3b8; font-size: 14px;">' + admin.username + '</div>';
+                html += '<div style="margin-top: 8px;">';
+                html += '<span style="display: inline-block; background: #0ea5e9; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px;">' + admin.platform + '</span>';
+                if (admin.has_vault_entry) {
+                    html += '<span style="display: inline-block; background: #10b981; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px;"><i class="ph ph-check-circle"></i> Vault Entry</span>';
+                } else {
+                    html += '<span style="display: inline-block; background: #f97316; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px;"><i class="ph ph-warning"></i> No Vault Entry</span>';
+                }
+                html += '</div>';
+                html += '</div>';
+                html += '<div style="color: #0ea5e9; font-size: 20px;"><i class="ph ph-caret-right"></i></div>';
+                html += '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        } else {
+            html += '<div style="text-align: center; color: #94a3b8; padding: 48px;">';
+            html += '<i class="ph ph-empty" style="font-size: 48px; opacity: 0.5;"></i>';
+            html += '<p style="margin-top: 16px;">No administrators found</p>';
+            html += '</div>';
+        }
+        
+        html += '</div>';
+        contentDiv.innerHTML = html;
+    }
+    
+    function showCloudAdminsError(message) {
+        const contentDiv = document.getElementById('cloudAdminsContent');
+        if (!contentDiv) return;
+        
+        contentDiv.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 48px;">' +
+            '<i class="ph ph-warning-circle" style="font-size: 48px;"></i>' +
+            '<p style="margin-top: 16px;">' + message + '</p>' +
+        '</div>';
+    }
+    
+    function openAdminDetailsModal(username) {
+        // This function will be overridden by the dashboard page if available
+        // Otherwise, just show a basic alert
+        if (typeof window.openAdminDetailsModalFull === 'function') {
+            window.openAdminDetailsModalFull(username);
+        } else {
+            alert('Admin details view is only available from the Dashboard page.');
+        }
+    }
+    </script>
     
     {% block extra_js %}{% endblock %}
 </body>

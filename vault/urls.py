@@ -7,7 +7,7 @@ from .authentication import (
     microsoft_login, microsoft_callback
 )
 from .views import (
-    VaultEntryViewSet, CredentialTypeViewSet, dashboard_view,
+    VaultEntryViewSet, CredentialTypeViewSet, dashboard_view, pam_dashboard_view,
     vault_entries_view, credential_types_view, user_management_view,
     audit_logs_view, api_docs_view, create_vault_entry, update_vault_entry,
     get_vault_entry, delete_vault_entry, get_users, create_user, update_user, delete_user,
@@ -44,6 +44,7 @@ urlpatterns = [
     # Main application views
     path('', dashboard_view, name='home'),  # Default home view
     path('dashboard/', dashboard_view, name='dashboard'),
+    path('pam-dashboard/', pam_dashboard_view, name='pam_dashboard'),
     path('vault/', vault_entries_view, name='vault_entries'),
     path('credentials/', credential_types_view, name='credential_types'),
     
