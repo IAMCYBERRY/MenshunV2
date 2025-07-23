@@ -67,8 +67,7 @@ RUN mkdir -p /app/menshen/settings
 # Copy production settings file
 COPY --chown=menshun:menshun config/settings/production.py /app/menshen/settings/production.py
 
-# Collect static files (Django admin, etc.)
-RUN python manage.py collectstatic --noinput --clear --settings=menshen.settings.production
+# Static files will be collected at runtime via entrypoint script
 
 # Create health check script
 RUN echo '#!/bin/bash\ncurl -f http://localhost:8000/health/ || exit 1' > /app/healthcheck.sh \
