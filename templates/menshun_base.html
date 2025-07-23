@@ -637,6 +637,12 @@
                             Credential Types
                         </a>
                     </div>
+                    <div class="nav-item">
+                        <a href="{% url 'vault:service_identities' %}" class="nav-link {% if request.resolver_match.url_name == 'service_identities' %}active{% endif %}">
+                            <i class="ph ph-robot"></i>
+                            Service Identities
+                        </a>
+                    </div>
                 </div>
                 
                 <!-- Administration -->

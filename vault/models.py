@@ -827,7 +827,8 @@ class ServicePrincipal(models.Model):
     delegated_permissions = models.JSONField(default=list, blank=True)
     
     # Management
-    owner = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='owned_service_principals')
+    owner = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='owned_identity_service_principals')
+    owner_entra_id = models.CharField(max_length=255, blank=True, null=True, help_text='Entra user ID of the owner')
     service_account = models.ForeignKey('ServiceAccount', on_delete=models.SET_NULL, null=True, blank=True, related_name='service_principals')
     
     # Status
@@ -839,7 +840,7 @@ class ServicePrincipal(models.Model):
     # Audit Fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='created_service_principals')
+    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='created_identity_service_principals')
     
     # Metadata
     tags = models.JSONField(default=list, blank=True)
@@ -933,3 +934,4 @@ class ServicePrincipalSecret(models.Model):
         db_table = 'vault_serviceprincipalsecret'
         ordering = ['-created_at']
         unique_together = ['service_principal', 'secret_id']
+

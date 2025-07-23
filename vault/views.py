@@ -6,7 +6,8 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_http_methods
-from django.db import models
+from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework import viewsets, status, filters
@@ -17,7 +18,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 import json
 import logging
 
-from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog, EntraUser, EntraRole, EntraRoleAssignment
+from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog, EntraUser, EntraRole, EntraRoleAssignment, ServiceAccount, ServicePrincipal, ServicePrincipalSecret
 from .audit import AuditLogger
 from .forms import VaultEntryForm, CredentialTypeForm
 from .serializers import (
@@ -2815,3 +2816,681 @@ def pam_dashboard_view(request):
     }
     
     return render(request, 'vault/pam_dashboard.html', context)
+
+
+@login_required
+def service_identities_view(request):
+    """Service Identities dashboard view"""
+    
+    # Get all service accounts
+    service_accounts = ServiceAccount.objects.select_related(
+        'manager', 'owner', 'vault_entry', 'created_by'
+    ).prefetch_related('service_principals')
+    
+    # Debug: Log the service accounts and their managers
+    logger.info(f"Service Identities View - Found {service_accounts.count()} service accounts:")
+    for sa in service_accounts[:3]:  # Log first 3 for debugging
+        manager_name = sa.manager.display_name if sa.manager else "No manager"
+        logger.info(f"  {sa.employee_id}: {sa.service_name} (Manager: {manager_name})")
+    
+    # Get all service principals
+    service_principals = ServicePrincipal.objects.select_related(
+        'owner', 'service_account', 'vault_entry', 'created_by'
+    ).prefetch_related('secrets')
+    
+    # Get all secrets
+    secrets = ServicePrincipalSecret.objects.select_related(
+        'service_principal', 'vault_entry', 'created_by'
+    )
+    
+    # Calculate metrics
+    total_service_accounts = service_accounts.count()
+    active_service_accounts = service_accounts.filter(status='ACTIVE').count()
+    
+    total_service_principals = service_principals.count()
+    active_service_principals = service_principals.filter(status='ACTIVE').count()
+    
+    total_secrets = secrets.count()
+    expiring_secrets = sum(1 for secret in secrets if secret.is_expiring_soon())
+    expired_secrets = sum(1 for secret in secrets if secret.is_expired())
+    
+    # Service accounts needing rotation
+    accounts_needing_rotation = sum(1 for account in service_accounts if account.needs_password_rotation())
+    
+    # Context for template
+    context = {
+        'service_accounts': service_accounts,
+        'service_principals': service_principals,
+        'secrets': secrets,
+        
+        # Metrics
+        'metrics': {
+            'total_service_accounts': total_service_accounts,
+            'active_service_accounts': active_service_accounts,
+            'total_service_principals': total_service_principals,
+            'active_service_principals': active_service_principals,
+            'total_secrets': total_secrets,
+            'expiring_secrets': expiring_secrets,
+            'expired_secrets': expired_secrets,
+            'accounts_needing_rotation': accounts_needing_rotation,
+        }
+    }
+    
+    return render(request, 'vault/service_identities.html', context)
+
+
+@login_required
+@require_http_methods(['GET'])
+def get_next_employee_id(request):
+    """Get the next available employee ID for Service Accounts"""
+    try:
+        next_id = ServiceAccount.generate_employee_id()
+        return JsonResponse({
+            'success': True,
+            'employee_id': next_id
+        })
+    except Exception as e:
+        logger.error(f"Error generating employee ID: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['POST'])
+def create_service_account(request):
+    """Create a new Service Account"""
+    try:
+        # Get form data
+        service_name = request.POST.get('service_name')
+        user_principal_name = request.POST.get('user_principal_name')
+        display_name = request.POST.get('display_name')
+        description = request.POST.get('description')
+        account_type = request.POST.get('account_type')
+        department = request.POST.get('department')
+        manager_id = request.POST.get('manager_id')
+        
+        # Log the form data for debugging
+        logger.info(f"Create Service Account - Form data received:")
+        logger.info(f"  service_name: {service_name}")
+        logger.info(f"  user_principal_name: {user_principal_name}")
+        logger.info(f"  display_name: {display_name}")
+        logger.info(f"  manager_id: {manager_id}")
+        
+        # Validate required fields
+        if not all([service_name, user_principal_name, display_name, description, account_type, manager_id]):
+            logger.error(f"Missing required fields: service_name={bool(service_name)}, user_principal_name={bool(user_principal_name)}, display_name={bool(display_name)}, description={bool(description)}, account_type={bool(account_type)}, manager_id={bool(manager_id)}")
+            return JsonResponse({
+                'success': False,
+                'error': 'All required fields must be filled'
+            })
+        
+        # Get manager from Entra ID and ensure local record exists
+        manager = None
+        
+        try:
+            from .entra_integration import EntraIntegrationService
+            entra_service = EntraIntegrationService()
+            
+            # Check if Entra is configured
+            if not entra_service.is_configured():
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Entra ID integration is not configured'
+                })
+            
+            logger.info(f"Looking up manager with ID: {manager_id}")
+            
+            # Get user details from Entra ID
+            user_info = entra_service.user_manager.get_user_by_id(manager_id)
+            
+            if not user_info:
+                logger.error(f"Manager with ID {manager_id} not found in Entra ID")
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Manager with ID {manager_id} not found in Entra ID'
+                })
+            
+            logger.info(f"Found manager in Entra: {user_info.get('displayName', 'Unknown')}")
+            
+            # Create or update local EntraUser record
+            manager, created = EntraUser.objects.get_or_create(
+                entra_user_id=manager_id,
+                defaults={
+                    'user_principal_name': user_info.get('userPrincipalName', ''),
+                    'display_name': user_info.get('displayName', ''),
+                    'email': user_info.get('mail', user_info.get('userPrincipalName', '')),
+                    'job_title': user_info.get('jobTitle', ''),
+                    'department': user_info.get('department', ''),
+                    'account_enabled': user_info.get('accountEnabled', True)
+                }
+            )
+            
+            # Update existing record if needed
+            if not created:
+                manager.display_name = user_info.get('displayName', manager.display_name)
+                manager.email = user_info.get('mail', manager.email)
+                manager.job_title = user_info.get('jobTitle', manager.job_title)
+                manager.department = user_info.get('department', manager.department)
+                manager.account_enabled = user_info.get('accountEnabled', manager.account_enabled)
+                manager.save()
+            
+            logger.info(f"Manager {'created' if created else 'updated'} locally: {manager.display_name}")
+                
+        except Exception as e:
+            logger.error(f"Error finding manager: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': f'Error finding manager: {str(e)}'
+            })
+        
+        # Generate employee ID
+        employee_id = ServiceAccount.generate_employee_id()
+        
+        # Generate secure password for the service account
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+        password = ''.join(secrets.choice(alphabet) for i in range(24))
+        
+        # Create Service Account in Entra ID first
+        entra_user_data = {
+            'displayName': display_name,
+            'userPrincipalName': user_principal_name,
+            'mail': user_principal_name,  # Set email to UPN as well
+            'mailNickname': user_principal_name.split('@')[0],
+            'accountEnabled': True,
+            'passwordProfile': {
+                'password': password,
+                'forceChangePasswordNextSignIn': False
+            },
+            'jobTitle': 'Service Account',
+            'department': department or 'Automation',
+            'employeeId': employee_id,
+            'usageLocation': 'US',  # Required for license assignment
+            'userType': 'Member'
+        }
+        
+        # Create user in Entra ID
+        entra_creation_result = entra_service.user_manager.create_user(entra_user_data)
+        
+        if not entra_creation_result.get('success'):
+            logger.error(f"Failed to create service account in Entra ID: {entra_creation_result.get('error')}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create service account in Entra ID: {entra_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        entra_user_id = entra_creation_result.get('user', {}).get('id')
+        
+        # Create local Service Account record
+        service_account = ServiceAccount.objects.create(
+            employee_id=employee_id,
+            service_name=service_name,
+            user_principal_name=user_principal_name,
+            display_name=display_name,
+            description=description,
+            account_type=account_type,
+            department=department,
+            manager=manager,
+            owner=request.user,
+            job_title='Service Account',
+            employee_type='Automation',
+            status='ACTIVE',  # Mark as active since it was created in Entra ID
+            entra_user_id=entra_user_id,  # Store the Entra ID
+            created_by=request.user
+        )
+        
+        # Create vault entry for the service account
+        credential_type, _ = CredentialType.objects.get_or_create(
+            name='Service Account',
+            defaults={'description': 'Service account credentials'}
+        )
+        
+        vault_entry = VaultEntry.objects.create(
+            name=f"Service Account - {service_name}",
+            username=user_principal_name,
+            password=password,  # In production, this should be encrypted
+            credential_type=credential_type,
+            owner=request.user,
+            notes=f"Auto-generated password for service account {employee_id}",
+            created_by=request.user,
+            updated_by=request.user
+        )
+        
+        # Link vault entry to service account and update status
+        service_account.vault_entry = vault_entry
+        service_account.password_last_set = timezone.now()
+        service_account.schedule_password_rotation()
+        service_account.status = 'ACTIVE'  # Update status from PENDING to ACTIVE
+        service_account.save()
+        
+        # Log the creation
+        AuditLogger.log_action(
+            user=request.user,
+            action='SERVICE_ACCOUNT_CREATED',
+            details={
+                'employee_id': employee_id,
+                'service_name': service_name,
+                'user_principal_name': user_principal_name,
+                'entra_user_id': entra_user_id,
+                'manager': manager.display_name,
+                'created_in_entra': True,
+                'department': department
+            }
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'service_account': {
+                'id': service_account.id,
+                'employee_id': service_account.employee_id,
+                'service_name': service_account.service_name
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating service account: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['GET'])
+def search_managers(request):
+    """Search for managers in Entra ID for Service Account creation"""
+    try:
+        search_term = request.GET.get('q', '').strip()
+        
+        if len(search_term) < 2:
+            return JsonResponse({
+                'success': True,
+                'users': []
+            })
+        
+        # Use Entra Integration Service to search for users
+        from .entra_integration import EntraIntegrationService
+        
+        entra_service = EntraIntegrationService()
+        
+        # Check if Entra is configured
+        if not entra_service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra ID integration is not configured. Please configure it first.'
+            })
+        
+        # Search users in Entra ID
+        search_result = entra_service.user_manager.search_users(search_term)
+        
+        if not search_result.get('success'):
+            logger.error(f"Entra user search failed: {search_result.get('error')}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Search failed: {search_result.get('error', 'Unknown error')}"
+            })
+        
+        users_data = []
+        entra_users = search_result.get('users', [])
+        
+        for user in entra_users:
+            users_data.append({
+                'id': user.get('id'),  # Use actual Entra ID
+                'type': 'entra',
+                'display_name': user.get('displayName', ''),
+                'user_principal_name': user.get('userPrincipalName', ''),
+                'email': user.get('mail', user.get('userPrincipalName', '')),
+                'job_title': user.get('jobTitle', ''),
+                'department': user.get('department', ''),
+                'source': 'Entra ID'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'users': users_data[:10]  # Limit to 10 results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error searching managers: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Search failed: {str(e)}"
+        })
+
+
+@login_required
+@require_http_methods(["GET"])
+def search_service_accounts(request):
+    """Search for Service Accounts to link to Service Principals"""
+    try:
+        search_term = request.GET.get('q', '').strip()
+        
+        if len(search_term) < 2:
+            return JsonResponse({
+                'success': True,
+                'accounts': []
+            })
+        
+        # Search Service Accounts
+        from .models import ServiceAccount
+        
+        accounts = ServiceAccount.objects.filter(
+            Q(service_name__icontains=search_term) |
+            Q(employee_id__icontains=search_term) |
+            Q(description__icontains=search_term)
+        )[:10]  # Limit to 10 results
+        
+        accounts_data = []
+        for account in accounts:
+            accounts_data.append({
+                'id': account.id,
+                'employee_id': account.employee_id,
+                'service_name': account.service_name,
+                'description': account.description or '',
+                'display_name': f"{account.service_name} ({account.employee_id})"
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'accounts': accounts_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error searching service accounts: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Search failed: {str(e)}"
+        })
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def create_service_principal(request):
+    """Create a new Service Principal with Entra ID integration"""
+    try:
+        # Parse JSON data
+        if hasattr(request, '_body'):
+            body = request._body
+        else:
+            body = request.body
+        
+        data = json.loads(body)
+        
+        # Validate required fields
+        required_fields = ['application_name', 'owner_id']
+        for field in required_fields:
+            if not data.get(field):
+                return JsonResponse({
+                    'success': False,
+                    'error': f'{field.replace("_", " ").title()} is required.'
+                })
+        
+        application_name = data.get('application_name').strip()
+        application_type = data.get('application_type', 'web')  # Default to 'web'
+        description = data.get('description', '').strip()
+        home_page_url = data.get('home_page_url', '').strip()
+        redirect_uris = data.get('redirect_uris', [])
+        service_account_id = data.get('service_account_id')
+        owner_id = data.get('owner_id')
+        secret_expiration_months = int(data.get('secret_expiration_months', 6))  # Default to 6 months
+        
+        # Validate application type if provided
+        valid_types = ['web', 'spa', 'mobile', 'daemon']
+        if application_type and application_type not in valid_types:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid application type. Must be one of: {", ".join(valid_types)}.'
+            })
+        
+        # Validate Service Account if provided
+        service_account = None
+        if service_account_id:
+            try:
+                from .models import ServiceAccount
+                service_account = ServiceAccount.objects.get(id=service_account_id)
+            except ServiceAccount.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Selected Service Account not found.'
+                })
+        
+        # Create Service Principal in Entra ID first
+        from .entra_integration import EntraIntegrationService
+        
+        entra_service = EntraIntegrationService()
+        
+        # Check if Entra is configured
+        if not entra_service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra ID integration is not configured. Please configure it first.'
+            })
+        
+        # Prepare app registration data
+        app_data = {
+            'displayName': application_name,
+            'signInAudience': 'AzureADMyOrg',  # Single tenant
+            'requiredResourceAccess': []
+        }
+        
+        # Add platform-specific configurations based on application type
+        if application_type == 'web':
+            if redirect_uris or home_page_url:
+                app_data['web'] = {}
+                if redirect_uris:
+                    app_data['web']['redirectUris'] = redirect_uris
+                if home_page_url:
+                    app_data['web']['homePageUrl'] = home_page_url
+        elif application_type == 'spa':
+            if redirect_uris:
+                app_data['spa'] = {
+                    'redirectUris': redirect_uris
+                }
+        elif application_type == 'mobile':
+            if redirect_uris:
+                app_data['publicClient'] = {
+                    'redirectUris': redirect_uris
+                }
+        # daemon type doesn't need redirect URIs
+        
+        # Create app registration in Entra ID
+        app_creation_result = entra_service.application_manager.create_application(app_data)
+        
+        if not app_creation_result.get('success'):
+            logger.error(f"Entra app creation failed: {app_creation_result.get('error')}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create application in Entra ID: {app_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        app_info = app_creation_result.get('application', {})
+        app_id = app_info.get('appId')  # Client ID
+        object_id = app_info.get('id')  # Object ID
+        
+        # Create Service Principal for the app
+        sp_creation_result = entra_service.application_manager.create_service_principal(app_id)
+        
+        if not sp_creation_result.get('success'):
+            logger.error(f"Service Principal creation failed: {sp_creation_result.get('error')}")
+            # Try to clean up the app registration
+            try:
+                entra_service.application_manager.delete_application(object_id)
+            except:
+                pass
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create Service Principal: {sp_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        sp_info = sp_creation_result.get('service_principal', {})
+        
+        # Add owner to the application
+        owner_result = entra_service.application_manager.add_application_owner(object_id, owner_id)
+        
+        if not owner_result.get('success'):
+            logger.warning(f"Failed to add owner to application: {owner_result.get('error')}")
+            # Continue anyway as the app is created, just log the warning
+        
+        # Generate client secret
+        secret_creation_result = entra_service.application_manager.create_application_secret(
+            object_id, 
+            f"{application_name} Secret",
+            secret_expiration_months
+        )
+        
+        if not secret_creation_result.get('success'):
+            logger.error(f"Secret creation failed: {secret_creation_result.get('error')}")
+            # Clean up created resources
+            try:
+                entra_service.application_manager.delete_application(object_id)
+            except:
+                pass
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create client secret: {secret_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        secret_info = secret_creation_result.get('secret', {})
+        client_secret_value = secret_info.get('secretText')
+        secret_key_id = secret_info.get('keyId')
+        
+        # Create local ServicePrincipal record
+        from .models import ServicePrincipal, ServicePrincipalSecret
+        
+        try:
+            with transaction.atomic():
+                # Map application type to model choices
+                type_mapping = {
+                    'web': 'WEB',
+                    'spa': 'SPA',
+                    'mobile': 'NATIVE',
+                    'daemon': 'DAEMON'
+                }
+                
+                # Create Service Principal
+                service_principal = ServicePrincipal.objects.create(
+                application_name=application_name,
+                application_type=type_mapping.get(application_type, 'WEB'),
+                description=description,
+                home_page_url=home_page_url,
+                redirect_uris=redirect_uris,
+                service_account=service_account,
+                client_id=app_id,
+                entra_app_id=app_id,  # Application ID
+                entra_object_id=object_id,  # Service Principal Object ID
+                tenant_id=entra_service.tenant_id,
+                owner=request.user,
+                owner_entra_id=owner_id,
+                created_by=request.user
+                )
+                
+                # Create Service Principal Secret record
+                from dateutil import parser
+                expires_at_str = secret_info.get('endDateTime')
+                expires_at = parser.parse(expires_at_str) if expires_at_str else None
+                
+                secret = ServicePrincipalSecret.objects.create(
+                service_principal=service_principal,
+                secret_id=secret_key_id,
+                display_name=f"{application_name} Secret",
+                description=f"Client secret for {application_name}",
+                secret_value=client_secret_value,  # This should be encrypted in production
+                created_date=timezone.now(),
+                expires_at=expires_at
+                )
+                
+                # Vault the credentials
+                from .models import VaultEntry, CredentialType
+                
+                # Get or create Service Principal credential type
+                sp_credential_type, _ = CredentialType.objects.get_or_create(
+                name='Service Principal',
+                defaults={
+                    'description': 'Service Principal credentials for app registrations'
+                }
+                )
+                
+                # Create vault entry for Service Principal
+                vault_entry = VaultEntry.objects.create(
+                    name=f"SP - {application_name}",
+                    username=app_id,  # Client ID as username
+                    password=client_secret_value,  # Client Secret as password
+                    credential_type=sp_credential_type,
+                    owner=request.user,
+                    url=f"https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/Overview/appId/{app_id}",
+                    notes=f"Service Principal for {application_name}\n\nDescription: {description}\n\nClient ID: {app_id}\nObject ID: {object_id}\nTenant ID: {entra_service.tenant_id}\nApplication Type: {application_type}",
+                    created_by=request.user,
+                    updated_by=request.user
+                )
+                
+                # Link vault entry to Service Principal and update status
+                service_principal.vault_entry = vault_entry
+                service_principal.status = 'ACTIVE'  # Update status from PENDING to ACTIVE
+                service_principal.save()
+        
+        except Exception as e:
+            # Local creation failed, clean up Entra resources
+            logger.error(f"Failed to create Service Principal locally: {str(e)}")
+            
+            # Try to clean up the Entra resources
+            try:
+                logger.info(f"Attempting to clean up Entra resources for {application_name}")
+                entra_service.application_manager.delete_application(object_id)
+                logger.info(f"Successfully deleted orphaned application {object_id}")
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up Entra application {object_id}: {cleanup_error}")
+                # Return error with cleanup warning
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Failed to create Service Principal locally: {str(e)}. WARNING: Application was created in Entra ID but could not be removed. Please manually delete app with Object ID: {object_id}"
+                })
+            
+            # Return the original error
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create Service Principal: {str(e)}"
+            })
+        
+        # Log the creation
+        AuditLogger.log_security_event(
+            category='SERVICE_IDENTITY',
+            action='SERVICE_PRINCIPAL_CREATE',
+            user=request.user,
+            description=f"Created Service Principal: {application_name} ({app_id})",
+            request=request,
+            severity='MEDIUM',
+            success=True,
+            details={
+                'application_name': application_name,
+                'application_type': application_type,
+                'client_id': app_id,
+                'service_account_id': service_account_id if service_account else None
+            }
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Service Principal "{application_name}" created successfully!',
+            'service_principal': {
+                'id': service_principal.id,
+                'application_name': application_name,
+                'client_id': app_id,
+                'application_type': application_type
+            }
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON data.'
+        })
+    except Exception as e:
+        logger.error(f"Error creating Service Principal: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Failed to create Service Principal: {str(e)}"
+        })

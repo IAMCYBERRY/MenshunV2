@@ -947,6 +947,191 @@ class EntraPIMManager:
             return []
 
 
+class EntraApplicationManager:
+    """Manages Application and Service Principal operations in Entra ID"""
+    
+    def __init__(self):
+        self.auth = EntraAuthenticator()
+        self.graph_url = "https://graph.microsoft.com/v1.0"
+    
+    def create_application(self, app_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new application registration in Entra ID"""
+        try:
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/applications"
+            
+            response = requests.post(url, headers=headers, json=app_data)
+            
+            if response.status_code == 201:
+                app_info = response.json()
+                logger.info(f"Successfully created application: {app_info.get('displayName')}")
+                return {
+                    "success": True,
+                    "application": app_info
+                }
+            else:
+                error_data = response.json()
+                error_msg = error_data.get('error', {}).get('message', 'Unknown error')
+                logger.error(f"Failed to create application: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to create application: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def create_service_principal(self, app_id: str) -> Dict[str, Any]:
+        """Create a service principal for an application"""
+        try:
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/servicePrincipals"
+            
+            payload = {
+                "appId": app_id
+            }
+            
+            response = requests.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 201:
+                sp_info = response.json()
+                logger.info(f"Successfully created service principal for app: {app_id}")
+                return {
+                    "success": True,
+                    "service_principal": sp_info
+                }
+            else:
+                error_data = response.json()
+                error_msg = error_data.get('error', {}).get('message', 'Unknown error')
+                logger.error(f"Failed to create service principal: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to create service principal: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def create_application_secret(self, app_object_id: str, description: str, expiration_months: int = 24) -> Dict[str, Any]:
+        """Create a client secret for an application"""
+        try:
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/applications/{app_object_id}/addPassword"
+            
+            # Set expiration based on provided months
+            end_date = datetime.utcnow() + timedelta(days=expiration_months * 30)
+            
+            payload = {
+                "passwordCredential": {
+                    "displayName": description,
+                    "endDateTime": end_date.isoformat() + "Z"
+                }
+            }
+            
+            response = requests.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                secret_info = response.json()
+                logger.info(f"Successfully created secret for application: {app_object_id}")
+                return {
+                    "success": True,
+                    "secret": secret_info
+                }
+            else:
+                error_data = response.json()
+                error_msg = error_data.get('error', {}).get('message', 'Unknown error')
+                logger.error(f"Failed to create application secret: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to create application secret: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def delete_application(self, app_object_id: str) -> bool:
+        """Delete an application registration"""
+        try:
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/applications/{app_object_id}"
+            
+            response = requests.delete(url, headers=headers)
+            
+            if response.status_code == 204:
+                logger.info(f"Successfully deleted application: {app_object_id}")
+                return True
+            else:
+                logger.error(f"Failed to delete application: {response.status_code}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to delete application: {e}")
+            return False
+    
+    def get_application(self, app_object_id: str) -> Optional[Dict[str, Any]]:
+        """Get application details"""
+        try:
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/applications/{app_object_id}"
+            
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Failed to get application: {response.status_code}")
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to get application: {e}")
+            return None
+    
+    def add_application_owner(self, app_object_id: str, owner_user_id: str) -> Dict[str, Any]:
+        """Add an owner to an application"""
+        try:
+            headers = self.auth.get_auth_headers()
+            url = f"{self.graph_url}/applications/{app_object_id}/owners/$ref"
+            
+            payload = {
+                "@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{owner_user_id}"
+            }
+            
+            response = requests.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 204:
+                logger.info(f"Successfully added owner {owner_user_id} to application {app_object_id}")
+                return {
+                    "success": True
+                }
+            else:
+                error_data = response.json() if response.content else {}
+                error_msg = error_data.get('error', {}).get('message', f'Status code: {response.status_code}')
+                logger.error(f"Failed to add application owner: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to add application owner: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+
 class EntraIntegrationService:
     """Main service class for Entra ID integration"""
     
@@ -954,6 +1139,15 @@ class EntraIntegrationService:
         self.user_manager = EntraUserManager()
         self.role_manager = EntraRoleManager()
         self.pim_manager = EntraPIMManager()
+        self.application_manager = EntraApplicationManager()
+        self._tenant_id = None
+    
+    @property
+    def tenant_id(self) -> str:
+        """Get the tenant ID"""
+        if self._tenant_id is None:
+            self._tenant_id = EntraConfig.get_tenant_id()
+        return self._tenant_id
     
     def is_configured(self) -> bool:
         """Check if Entra integration is properly configured"""

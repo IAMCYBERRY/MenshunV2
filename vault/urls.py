@@ -18,7 +18,10 @@ from .views import (
     # Role management endpoints
     entra_user_roles, entra_available_roles, entra_assign_role, entra_remove_role, entra_role_members,
     # Cloud admin management
-    cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account
+    cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account,
+    # Service Identity management
+    service_identities_view, get_next_employee_id, create_service_account, search_managers,
+    search_service_accounts, create_service_principal
 )
 
 # Create a router for DRF ViewSets
@@ -47,6 +50,7 @@ urlpatterns = [
     path('pam-dashboard/', pam_dashboard_view, name='pam_dashboard'),
     path('vault/', vault_entries_view, name='vault_entries'),
     path('credentials/', credential_types_view, name='credential_types'),
+    path('service-identities/', service_identities_view, name='service_identities'),
     
     # Admin views
     path('users/', user_management_view, name='user_management'),
@@ -96,4 +100,11 @@ urlpatterns = [
     path('ajax/admin-reset-password/<str:username>/', reset_admin_password, name='ajax_reset_admin_password'),
     path('ajax/admin-toggle-account/<str:username>/', toggle_admin_account, name='ajax_toggle_admin_account'),
     path('ajax/admin-update-account/<str:username>/', update_admin_account, name='ajax_update_admin_account'),
+    
+    # Service Identity AJAX endpoints
+    path('ajax/get-next-employee-id/', get_next_employee_id, name='ajax_get_next_employee_id'),
+    path('ajax/create-service-account/', create_service_account, name='ajax_create_service_account'),
+    path('ajax/search-managers/', search_managers, name='ajax_search_managers'),
+    path('ajax/search-service-accounts/', search_service_accounts, name='ajax_search_service_accounts'),
+    path('ajax/create-service-principal/', create_service_principal, name='ajax_create_service_principal'),
 ]
