@@ -165,7 +165,15 @@ EOF
 sudo systemctl restart docker
 
 print_status "✅ Docker installation completed successfully!"
-print_warning "⚠️  Please log out and log back in (or run 'newgrp docker') for group changes to take effect."
+print_warning "⚠️  IMPORTANT: User has been added to docker group."
+print_warning "⚠️  You must log out and log back in for group changes to take effect."
+print_warning "⚠️  Alternatively, run 'newgrp docker' to activate the group in current session."
+print_status "After group activation, verify with: docker run --rm hello-world"
 
-# Verify user can run docker without sudo (after group change)
-print_status "After logging back in, verify with: docker run --rm hello-world"
+# For immediate use in scripts, we can try newgrp
+print_status "Attempting to activate docker group for current session..."
+if newgrp docker -c "docker run --rm hello-world" 2>/dev/null; then
+    print_status "✅ Docker group activated successfully in current session"
+else
+    print_warning "⚠️  Could not activate docker group automatically. Please log out and log back in."
+fi

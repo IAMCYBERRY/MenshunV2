@@ -92,6 +92,11 @@ deploy: ## Deploy/update Menshun in production mode
 		$(call print_error,"Production environment file not found. Run 'make init' first."); \
 		exit 1; \
 	fi
+	@if ! groups | grep -q docker; then \
+		$(call print_error,"Current user is not in docker group. Please log out and log back in, or run 'newgrp docker'."); \
+		$(call print_error,"Then run 'make deploy' again."); \
+		exit 1; \
+	fi
 	@echo "$(BLUE)Building production images...$(NC)"
 	@$(COMPOSE_PROD) build --no-cache
 	@echo "$(BLUE)Starting database migrations...$(NC)"
