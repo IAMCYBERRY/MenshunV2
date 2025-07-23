@@ -3,7 +3,7 @@ Production settings for Menshun PAM
 Inherits from base settings and overrides for production environment
 """
 
-from menshen.settings import *
+from menshen.settings.base import *
 import logging.config
 import os
 
