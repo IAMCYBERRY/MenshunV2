@@ -30,16 +30,21 @@ if command -v docker >/dev/null 2>&1; then
         COMPOSE_VERSION=$(docker-compose --version | cut -d' ' -f3 | cut -d',' -f1)
         print_status "Docker Compose is already installed: $COMPOSE_VERSION"
         
-        # Check if user is in docker group
-        if groups | grep -q docker; then
-            print_status "User is already in docker group"
-            print_status "✅ Docker setup is complete!"
-            exit 0
+        # Check if docker group exists and if user is in it
+        if getent group docker >/dev/null 2>&1; then
+            if groups | grep -q docker; then
+                print_status "User is already in docker group"
+                print_status "✅ Docker setup is complete!"
+                exit 0
+            else
+                print_warning "User is not in docker group. Adding user to docker group..."
+                sudo usermod -aG docker $USER
+                print_status "✅ User added to docker group. Please log out and log back in for changes to take effect."
+                exit 0
+            fi
         else
-            print_warning "User is not in docker group. Adding user to docker group..."
-            sudo usermod -aG docker $USER
-            print_status "✅ User added to docker group. Please log out and log back in for changes to take effect."
-            exit 0
+            print_warning "Docker group doesn't exist. This suggests Docker was not installed properly."
+            print_status "Proceeding with Docker installation to fix this..."
         fi
     fi
 else
