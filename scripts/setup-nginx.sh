@@ -26,35 +26,8 @@ print_section() {
 
 print_section "Nginx Setup"
 
-# Check if Nginx is already installed
-if command -v nginx >/dev/null 2>&1; then
-    print_status "Nginx is already installed: $(nginx -v 2>&1)"
-else
-    print_status "Installing Nginx..."
-    
-    # Detect OS and install Nginx
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$ID
-    else
-        print_error "Cannot detect OS"
-        exit 1
-    fi
-    
-    case $OS in
-        ubuntu|debian)
-            sudo apt-get update
-            sudo apt-get install -y nginx
-            ;;
-        centos|rhel|rocky|alma)
-            sudo yum install -y nginx
-            ;;
-        *)
-            print_error "Unsupported OS: $OS"
-            exit 1
-            ;;
-    esac
-fi
+print_status "Setting up Nginx configuration for Docker deployment..."
+print_status "Note: Nginx will run as a Docker container, not installed on host"
 
 # Stop nginx if running (we'll start it with systemd later)
 sudo systemctl stop nginx || true
@@ -144,14 +117,8 @@ fi
 sudo chown -R nginx:nginx /opt/menshun/logs/nginx
 sudo chmod 755 /opt/menshun/logs/nginx
 
-# Test Nginx configuration
-print_status "Testing Nginx configuration..."
-if sudo nginx -t; then
-    print_status "✅ Nginx configuration test passed"
-else
-    print_error "❌ Nginx configuration test failed"
-    exit 1
-fi
+# Configuration test will be done when Docker container starts
+print_status "Nginx configuration files prepared for Docker container"
 
 # Create Nginx systemd override for better integration
 print_status "Creating Nginx systemd override..."
