@@ -45,6 +45,7 @@ if command -v docker >/dev/null 2>&1; then
         else
             print_warning "Docker group doesn't exist. This suggests Docker was not installed properly."
             print_status "Proceeding with Docker installation to fix this..."
+            # Skip trying to add user to non-existent group, let the full installation handle it
         fi
     fi
 else

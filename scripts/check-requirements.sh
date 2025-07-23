@@ -171,7 +171,7 @@ done
 print_section "Firewall Status"
 
 if command -v ufw >/dev/null 2>&1; then
-    UFW_STATUS=$(ufw status | head -1)
+    UFW_STATUS=$(sudo ufw status 2>/dev/null | head -1 || echo "Status unavailable (requires sudo)")
     print_status "UFW: $UFW_STATUS"
 elif command -v firewall-cmd >/dev/null 2>&1; then
     if systemctl is-active --quiet firewalld; then
