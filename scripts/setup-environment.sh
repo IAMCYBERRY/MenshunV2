@@ -63,7 +63,10 @@ print_section "Environment Configuration Setup"
 print_status "Creating required directories..."
 sudo mkdir -p /opt/menshun/data/postgres
 sudo mkdir -p /opt/menshun/data/redis
+sudo mkdir -p /opt/menshun/data/static
+sudo mkdir -p /opt/menshun/data/media
 sudo mkdir -p /opt/menshun/logs
+sudo mkdir -p /opt/menshun/logs/nginx
 sudo mkdir -p /opt/menshun/backups
 sudo mkdir -p /opt/menshun/ssl
 sudo mkdir -p /opt/menshun/scripts
