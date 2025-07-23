@@ -30,7 +30,7 @@ print_status "Database is ready!"
 
 # Wait for Redis to be ready
 print_status "Waiting for Redis to be ready..."
-while ! redis-cli -h $REDIS_HOST -p $REDIS_PORT ping > /dev/null 2>&1; do
+while ! python -c "import redis; r=redis.Redis(host='$REDIS_HOST', port=$REDIS_PORT, socket_connect_timeout=1); r.ping()" > /dev/null 2>&1; do
     print_warning "Redis is unavailable - sleeping"
     sleep 1
 done
