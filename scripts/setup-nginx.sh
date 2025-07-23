@@ -179,7 +179,8 @@ rm /tmp/nginx-logrotate
 
 # Create Nginx monitoring script
 print_status "Creating Nginx monitoring script..."
-cat > /opt/menshun/scripts/nginx-monitor.sh << 'EOF'
+sudo mkdir -p /opt/menshun/scripts
+sudo tee /opt/menshun/scripts/nginx-monitor.sh << 'EOF' >/dev/null
 #!/bin/bash
 # Nginx monitoring script for Menshun PAM
 
@@ -206,7 +207,7 @@ fi
 echo "$(date): Nginx monitoring check passed" >> /opt/menshun/logs/nginx-monitor.log
 EOF
 
-chmod +x /opt/menshun/scripts/nginx-monitor.sh
+sudo chmod +x /opt/menshun/scripts/nginx-monitor.sh
 # Ensure nginx user exists before setting ownership
 if id nginx >/dev/null 2>&1; then
     sudo chown nginx:nginx /opt/menshun/scripts/nginx-monitor.sh
