@@ -64,8 +64,7 @@ COPY --chown=menshun:menshun . /app/
 # Create production settings
 RUN mkdir -p /app/menshen/settings
 
-# Copy production settings file
-COPY --chown=menshun:menshun config/settings/production.py /app/menshen/settings/production.py
+# Production settings are already included in the main copy above
 
 # Static files will be collected at runtime via entrypoint script
 
