@@ -97,7 +97,7 @@ CMD ["gunicorn", "--bind", "0.0.0.0:8000", \
      "--max-requests", "1000", \
      "--max-requests-jitter", "100", \
      "--preload", \
-     "--access-logfile", "/app/logs/gunicorn-access.log", \
-     "--error-logfile", "/app/logs/gunicorn-error.log", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
      "--log-level", "info", \
      "menshen.wsgi:application"]
