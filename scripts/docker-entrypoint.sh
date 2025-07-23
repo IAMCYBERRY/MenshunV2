@@ -67,9 +67,9 @@ python manage.py check --deploy
 # Create log directory if it doesn't exist
 mkdir -p /app/logs
 
-# Set log file permissions
-touch /app/logs/gunicorn-access.log /app/logs/gunicorn-error.log
-chmod 644 /app/logs/gunicorn-*.log
+# Set log file permissions (make sure menshun user can write)
+touch /app/logs/gunicorn-access.log /app/logs/gunicorn-error.log 2>/dev/null || true
+chmod 644 /app/logs/gunicorn-*.log 2>/dev/null || true
 
 print_status "Starting application..."
 
