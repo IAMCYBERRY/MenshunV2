@@ -30,7 +30,7 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # Variables
-COMPOSE_PROD = docker-compose -f docker-compose.prod.yml
+COMPOSE_PROD = docker-compose -f docker-compose.prod.yml --env-file .env.production
 COMPOSE_DEV = docker-compose -f docker-compose.yml
 BACKUP_DIR = /opt/menshun/backups
 LOG_DIR = /opt/menshun/logs
