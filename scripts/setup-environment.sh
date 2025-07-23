@@ -59,6 +59,20 @@ get_server_ip() {
 
 print_section "Environment Configuration Setup"
 
+# Create required directories
+print_status "Creating required directories..."
+sudo mkdir -p /opt/menshun/data/postgres
+sudo mkdir -p /opt/menshun/data/redis
+sudo mkdir -p /opt/menshun/logs
+sudo mkdir -p /opt/menshun/backups
+sudo mkdir -p /opt/menshun/ssl
+sudo mkdir -p /opt/menshun/scripts
+
+# Set proper ownership
+print_status "Setting directory permissions..."
+sudo chown -R $USER:$USER /opt/menshun
+sudo chmod -R 755 /opt/menshun
+
 # Check if .env.production already exists
 if [ -f .env.production ]; then
     print_warning "Production environment file already exists"
