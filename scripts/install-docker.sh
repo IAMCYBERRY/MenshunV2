@@ -157,9 +157,7 @@ cat << EOF | sudo tee /etc/docker/daemon.json
     },
     "storage-driver": "overlay2",
     "live-restore": true,
-    "userland-proxy": false,
-    "no-new-privileges": true,
-    "seccomp-profile": "/etc/docker/seccomp.json"
+    "userland-proxy": false
 }
 EOF
 
