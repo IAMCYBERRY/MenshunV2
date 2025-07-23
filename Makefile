@@ -227,11 +227,7 @@ monitor: ## Show real-time system monitoring
 performance: ## Show performance metrics
 	@echo "$(BLUE)Performance Metrics$(NC)"
 	@echo "==================="
-	@$(COMPOSE_PROD) exec -T web python manage.py shell -c "
-from django.core.management import execute_from_command_line
-from django.db import connection
-print('Database connections:', len(connection.queries))
-"
+	@$(COMPOSE_PROD) exec -T web python manage.py shell -c "from django.db import connection; print('Database connections:', len(connection.queries))"
 
 # Security commands
 security-scan: ## Run security scan
