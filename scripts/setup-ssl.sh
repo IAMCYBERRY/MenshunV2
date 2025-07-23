@@ -217,7 +217,7 @@ print_status "✅ SSL setup completed successfully!"
 
 # Create certificate renewal script (for self-signed)
 if [ "${SSL_CHOICE:-2}" = "2" ]; then
-    cat > $SSL_DIR/renew-cert.sh << 'EOF'
+    sudo tee $SSL_DIR/renew-cert.sh << 'EOF' >/dev/null
 #!/bin/bash
 # Self-signed certificate renewal script
 # Run this script annually to renew the self-signed certificate
