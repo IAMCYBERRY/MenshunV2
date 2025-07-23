@@ -13,3 +13,6 @@ pytest-django>=4.5.0
 factory-boy>=3.3.0
 coverage>=7.0.0
 gunicorn>=21.0.0
+azure-identity>=1.15.0
+azure-monitor-ingestion>=1.0.0
+python-dateutil>=2.8.0

@@ -21,7 +21,9 @@ from .views import (
     cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account,
     # Service Identity management
     service_identities_view, get_next_employee_id, create_service_account, search_managers,
-    search_service_accounts, create_service_principal
+    search_service_accounts, create_service_principal,
+    # Sentinel Integration
+    sentinel_config, sentinel_test
 )
 
 # Create a router for DRF ViewSets
@@ -107,4 +109,8 @@ urlpatterns = [
     path('ajax/search-managers/', search_managers, name='ajax_search_managers'),
     path('ajax/search-service-accounts/', search_service_accounts, name='ajax_search_service_accounts'),
     path('ajax/create-service-principal/', create_service_principal, name='ajax_create_service_principal'),
+    
+    # Sentinel Integration AJAX endpoints
+    path('ajax/sentinel-config/', sentinel_config, name='ajax_sentinel_config'),
+    path('ajax/sentinel-test/', sentinel_test, name='ajax_sentinel_test'),
 ]

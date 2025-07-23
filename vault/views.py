@@ -19,7 +19,8 @@ import json
 import logging
 
 from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog, EntraUser, EntraRole, EntraRoleAssignment, ServiceAccount, ServicePrincipal, ServicePrincipalSecret
-from .audit import AuditLogger
+from .audit import AuditLogger, run_sentinel_async
+from .sentinel_integration import get_sentinel_service
 from .forms import VaultEntryForm, CredentialTypeForm
 from .serializers import (
     VaultEntryListSerializer, VaultEntryDetailSerializer,
@@ -3081,6 +3082,25 @@ def create_service_account(request):
             }
         )
         
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            run_sentinel_async(
+                sentinel_service.send_service_identity_event(
+                    user=request.user,
+                    action='CREATE',
+                    identity_type='SERVICE_ACCOUNT',
+                    identity_id=employee_id,
+                    request=request,
+                    details={
+                        'service_name': service_name,
+                        'user_principal_name': user_principal_name,
+                        'manager': manager.display_name,
+                        'department': department
+                    }
+                )
+            )
+        
         return JsonResponse({
             'success': True,
             'service_account': {
@@ -3472,6 +3492,26 @@ def create_service_principal(request):
             }
         )
         
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            run_sentinel_async(
+                sentinel_service.send_service_identity_event(
+                    user=request.user,
+                    action='CREATE',
+                    identity_type='SERVICE_PRINCIPAL',
+                    identity_id=app_id,
+                    request=request,
+                    details={
+                        'application_name': application_name,
+                        'application_type': application_type,
+                        'client_id': app_id,
+                        'object_id': object_id,
+                        'tenant_id': entra_service.tenant_id
+                    }
+                )
+            )
+        
         return JsonResponse({
             'success': True,
             'message': f'Service Principal "{application_name}" created successfully!',
@@ -3493,4 +3533,164 @@ def create_service_principal(request):
         return JsonResponse({
             'success': False,
             'error': f"Failed to create Service Principal: {str(e)}"
+        })
+
+
+# Sentinel Integration Views
+@login_required
+@require_http_methods(['GET', 'POST'])
+def sentinel_config(request):
+    """Manage Sentinel integration configuration"""
+    try:
+        if request.method == 'GET':
+            # Get current Sentinel configuration
+            from .models import SentinelIntegration
+            config = SentinelIntegration.objects.filter(enabled=True).first()
+            
+            return JsonResponse({
+                'success': True,
+                'config': {
+                    'enabled': config.enabled if config else False,
+                    'workspace_id': config.workspace_id if config else '',
+                    'data_collection_endpoint': config.data_collection_endpoint if config else '',
+                    'data_collection_rule_id': config.data_collection_rule_id if config else '',
+                    'stream_name': config.stream_name if config else 'Custom-MenshunPAM_CL',
+                    'connector_type': config.connector_type if config else 'LOG_ANALYTICS',
+                    'batch_size': config.batch_size if config else 10,
+                    'batch_timeout': config.batch_timeout if config else 30,
+                    'send_auth_events': config.send_auth_events if config else True,
+                    'send_vault_events': config.send_vault_events if config else True,
+                    'send_service_identity_events': config.send_service_identity_events if config else True,
+                    'send_privileged_access_events': config.send_privileged_access_events if config else True,
+                    'last_event_count': config.last_event_count if config else 0,
+                    'last_success': config.last_success.isoformat() if config and config.last_success else None,
+                    'last_error': config.last_error if config else None,
+                } if config else {
+                    'enabled': False,
+                    'workspace_id': '',
+                    'data_collection_endpoint': '',
+                    'data_collection_rule_id': '',
+                    'stream_name': 'Custom-MenshunPAM_CL',
+                    'connector_type': 'LOG_ANALYTICS',
+                    'batch_size': 10,
+                    'batch_timeout': 30,
+                    'send_auth_events': True,
+                    'send_vault_events': True,
+                    'send_service_identity_events': True,
+                    'send_privileged_access_events': True,
+                    'last_event_count': 0,
+                    'last_success': None,
+                    'last_error': None,
+                }
+            })
+            
+        elif request.method == 'POST':
+            # Update Sentinel configuration
+            data = json.loads(request.body)
+            
+            from .models import SentinelIntegration
+            
+            # Get or create configuration
+            config, created = SentinelIntegration.objects.get_or_create(
+                defaults={
+                    'enabled': data.get('enabled', False),
+                    'workspace_id': data.get('workspace_id', ''),
+                    'data_collection_endpoint': data.get('data_collection_endpoint', ''),
+                    'data_collection_rule_id': data.get('data_collection_rule_id', ''),
+                    'stream_name': data.get('stream_name', 'Custom-MenshunPAM_CL'),
+                    'connector_type': data.get('connector_type', 'LOG_ANALYTICS'),
+                    'batch_size': data.get('batch_size', 10),
+                    'batch_timeout': data.get('batch_timeout', 30),
+                    'send_auth_events': data.get('send_auth_events', True),
+                    'send_vault_events': data.get('send_vault_events', True),
+                    'send_service_identity_events': data.get('send_service_identity_events', True),
+                    'send_privileged_access_events': data.get('send_privileged_access_events', True),
+                    'created_by': request.user,
+                    'updated_by': request.user,
+                }
+            )
+            
+            if not created:
+                # Update existing configuration
+                config.enabled = data.get('enabled', config.enabled)
+                config.workspace_id = data.get('workspace_id', config.workspace_id)
+                config.data_collection_endpoint = data.get('data_collection_endpoint', config.data_collection_endpoint)
+                config.data_collection_rule_id = data.get('data_collection_rule_id', config.data_collection_rule_id)
+                config.stream_name = data.get('stream_name', config.stream_name)
+                config.connector_type = data.get('connector_type', config.connector_type)
+                config.batch_size = data.get('batch_size', config.batch_size)
+                config.batch_timeout = data.get('batch_timeout', config.batch_timeout)
+                config.send_auth_events = data.get('send_auth_events', config.send_auth_events)
+                config.send_vault_events = data.get('send_vault_events', config.send_vault_events)
+                config.send_service_identity_events = data.get('send_service_identity_events', config.send_service_identity_events)
+                config.send_privileged_access_events = data.get('send_privileged_access_events', config.send_privileged_access_events)
+                config.updated_by = request.user
+                config.save()
+            
+            # Log configuration change
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='SENTINEL_CONFIG_UPDATE',
+                user=request.user,
+                description=f"Sentinel integration configuration {'enabled' if config.enabled else 'disabled'}",
+                request=request,
+                severity='HIGH',
+                success=True,
+                details={
+                    'enabled': config.enabled,
+                    'connector_type': config.connector_type,
+                    'created': created
+                }
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Sentinel configuration updated successfully',
+                'created': created
+            })
+            
+    except Exception as e:
+        logger.error(f"Error managing Sentinel configuration: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['POST'])
+def sentinel_test(request):
+    """Test Sentinel integration by sending a test event"""
+    try:
+        sentinel_service = get_sentinel_service()
+        
+        if not sentinel_service.is_enabled():
+            return JsonResponse({
+                'success': False,
+                'error': 'Sentinel integration is not enabled or configured'
+            })
+        
+        # Send a test event
+        run_sentinel_async(
+            sentinel_service.send_authentication_event(
+                user=request.user,
+                request=request,
+                success=True,
+                details={
+                    'test_event': True,
+                    'message': 'This is a test event from Menshun PAM'
+                }
+            )
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Test event sent successfully to Sentinel'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing Sentinel integration: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
         })

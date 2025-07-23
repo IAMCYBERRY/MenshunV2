@@ -935,3 +935,163 @@ class ServicePrincipalSecret(models.Model):
         ordering = ['-created_at']
         unique_together = ['service_principal', 'secret_id']
 
+
+# ===============================
+# Microsoft Sentinel Integration Models
+# ===============================
+
+class SentinelIntegration(models.Model):
+    """
+    Microsoft Sentinel integration configuration and status
+    """
+    CONNECTOR_TYPES = [
+        ('LOG_ANALYTICS', 'Log Analytics Workspace'),
+        ('EVENT_HUB', 'Azure Event Hub'),
+        ('SYSLOG', 'Syslog Integration'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+        ('ERROR', 'Error'),
+        ('CONFIGURING', 'Configuring'),
+    ]
+    
+    # Configuration
+    workspace_id = models.CharField(max_length=255, help_text='Log Analytics Workspace ID')
+    data_collection_endpoint = models.URLField(help_text='Data Collection Endpoint URL')
+    data_collection_rule_id = models.CharField(max_length=255, help_text='Data Collection Rule ID')
+    stream_name = models.CharField(max_length=255, default='Custom-MenshunPAM_CL')
+    tenant_id = models.CharField(max_length=255, help_text='Azure Tenant ID')
+    
+    # Connection settings
+    connector_type = models.CharField(max_length=20, choices=CONNECTOR_TYPES, default='LOG_ANALYTICS')
+    batch_size = models.PositiveIntegerField(default=100, help_text='Events per batch')
+    batch_timeout = models.PositiveIntegerField(default=60, help_text='Batch timeout in seconds')
+    retry_attempts = models.PositiveIntegerField(default=3)
+    
+    # Status and monitoring
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='INACTIVE')
+    last_successful_send = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, null=True)
+    events_sent_today = models.PositiveIntegerField(default=0)
+    total_events_sent = models.PositiveIntegerField(default=0)
+    
+    # Feature flags
+    enabled = models.BooleanField(default=False)
+    send_auth_events = models.BooleanField(default=True)
+    send_vault_events = models.BooleanField(default=True)
+    send_service_identity_events = models.BooleanField(default=True)
+    send_privileged_access_events = models.BooleanField(default=True)
+    
+    # Audit fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='created_sentinel_configs')
+    updated_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='updated_sentinel_configs')
+    
+    def __str__(self):
+        return f"Sentinel Integration ({self.workspace_id})"
+    
+    def is_configured(self):
+        """Check if Sentinel integration is properly configured"""
+        required_fields = [self.workspace_id, self.data_collection_endpoint, 
+                         self.data_collection_rule_id, self.tenant_id]
+        return all(required_fields) and self.enabled
+    
+    def update_stats(self, events_count=1, success=True, error_message=None):
+        """Update integration statistics"""
+        if success:
+            self.last_successful_send = timezone.now()
+            self.events_sent_today += events_count
+            self.total_events_sent += events_count
+            self.status = 'ACTIVE'
+            self.last_error = None
+        else:
+            self.status = 'ERROR'
+            self.last_error = error_message
+        self.save()
+    
+    class Meta:
+        db_table = 'vault_sentinelintegration'
+        verbose_name = 'Sentinel Integration'
+        verbose_name_plural = 'Sentinel Integrations'
+
+
+class SentinelEvent(models.Model):
+    """
+    Track Sentinel events for monitoring and debugging
+    """
+    EVENT_TYPES = [
+        ('AUTHENTICATION', 'Authentication'),
+        ('VAULT_ACCESS', 'Vault Access'),
+        ('SERVICE_IDENTITY', 'Service Identity'),
+        ('PRIVILEGED_ACCESS', 'Privileged Access'),
+        ('SYSTEM', 'System'),
+        ('SECURITY', 'Security'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SENT', 'Sent'),
+        ('FAILED', 'Failed'),
+        ('RETRY', 'Retry'),
+    ]
+    
+    # Event details
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
+    event_subtype = models.CharField(max_length=50, blank=True)
+    user = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, blank=True)
+    source_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    
+    # Event data
+    event_data = models.JSONField(help_text='Complete event data in JSON format')
+    severity = models.CharField(max_length=20, choices=[
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    ], default='MEDIUM')
+    
+    # Processing status
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    retry_count = models.PositiveIntegerField(default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, null=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.event_type} - {self.created_at}"
+    
+    def mark_sent(self):
+        """Mark event as successfully sent"""
+        self.status = 'SENT'
+        self.sent_at = timezone.now()
+        self.processed_at = timezone.now()
+        self.save()
+    
+    def mark_failed(self, error_message):
+        """Mark event as failed"""
+        self.status = 'FAILED'
+        self.error_message = error_message
+        self.processed_at = timezone.now()
+        self.retry_count += 1
+        self.save()
+    
+    def can_retry(self, max_retries=3):
+        """Check if event can be retried"""
+        return self.retry_count < max_retries and self.status in ['FAILED', 'RETRY']
+    
+    class Meta:
+        db_table = 'vault_sentinelevent'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['event_type', 'created_at']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['user', 'event_type']),
+        ]
+
