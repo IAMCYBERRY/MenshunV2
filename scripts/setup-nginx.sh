@@ -136,6 +136,11 @@ rm /tmp/50x.html
 
 # Set proper permissions
 print_status "Setting Nginx permissions..."
+# Check if nginx user exists, if not create it
+if ! id nginx >/dev/null 2>&1; then
+    print_warning "Nginx user doesn't exist, creating it..."
+    sudo useradd -r -s /bin/false nginx
+fi
 sudo chown -R nginx:nginx /opt/menshun/logs/nginx
 sudo chmod 755 /opt/menshun/logs/nginx
 
@@ -235,7 +240,12 @@ echo "$(date): Nginx monitoring check passed" >> /opt/menshun/logs/nginx-monitor
 EOF
 
 chmod +x /opt/menshun/scripts/nginx-monitor.sh
-sudo chown nginx:nginx /opt/menshun/scripts/nginx-monitor.sh
+# Ensure nginx user exists before setting ownership
+if id nginx >/dev/null 2>&1; then
+    sudo chown nginx:nginx /opt/menshun/scripts/nginx-monitor.sh
+else
+    print_warning "Nginx user not found, keeping default ownership"
+fi
 
 print_status "✅ Nginx setup completed successfully!"
 
