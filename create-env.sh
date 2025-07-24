@@ -39,10 +39,10 @@ REDIS_DB=0
 # =================================
 # Security Settings (SSL disabled for testing)
 # =================================
-SECURE_SSL_REDIRECT=false
+SECURE_SSL_REDIRECT=False
 SECURE_HSTS_SECONDS=0
-SESSION_COOKIE_SECURE=false
-CSRF_COOKIE_SECURE=false
+SESSION_COOKIE_SECURE=False
+CSRF_COOKIE_SECURE=False
 
 # =================================
 # Microsoft Entra ID Configuration (Optional)
