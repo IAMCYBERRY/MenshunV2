@@ -1,0 +1,50 @@
+# Menshun PAM - Simple Makefile for Production
+# Compatible with standard sh shell
+
+.PHONY: help status stop deploy start restart logs
+
+help:
+	@echo "Menshun PAM - Production Commands"
+	@echo "================================="
+	@echo "  make status   - Show service status"
+	@echo "  make stop     - Stop all services"  
+	@echo "  make deploy   - Deploy/update Menshun"
+	@echo "  make start    - Start all services"
+	@echo "  make restart  - Restart all services"
+	@echo "  make logs     - Show logs"
+
+status:
+	docker-compose -f docker-compose.prod.yml ps
+
+stop:
+	docker-compose -f docker-compose.prod.yml down
+
+deploy:
+	@echo "Deploying Menshun PAM..."
+	@if [ ! -f .env ]; then \
+		echo "ERROR: .env file not found. Create it first."; \
+		exit 1; \
+	fi
+	@echo "Building images..."
+	docker-compose -f docker-compose.prod.yml build
+	@echo "Starting services..."
+	docker-compose -f docker-compose.prod.yml up -d
+	@echo "Waiting for database..."
+	sleep 10
+	@echo "Running migrations..."
+	docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate
+	@echo "Collecting static files..."
+	docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput
+	@echo "Creating superuser if needed..."
+	docker-compose -f docker-compose.prod.yml exec -T web python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@menshun.local', 'changeme123')"
+	@echo "Deployment complete!"
+	@echo "Default admin: admin / changeme123"
+
+start:
+	docker-compose -f docker-compose.prod.yml up -d
+
+restart:
+	docker-compose -f docker-compose.prod.yml restart
+
+logs:
+	docker-compose -f docker-compose.prod.yml logs -f --tail=50
