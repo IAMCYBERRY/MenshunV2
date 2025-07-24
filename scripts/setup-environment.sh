@@ -61,28 +61,27 @@ print_section "Environment Configuration Setup"
 
 # Create required directories
 print_status "Creating required directories..."
-sudo mkdir -p /opt/menshun/data/postgres
-sudo mkdir -p /opt/menshun/data/redis
-sudo mkdir -p /opt/menshun/data/static
-sudo mkdir -p /opt/menshun/data/media
-sudo mkdir -p /opt/menshun/logs
-sudo mkdir -p /opt/menshun/logs/nginx
-sudo mkdir -p /opt/menshun/backups
-sudo mkdir -p /opt/menshun/ssl
-sudo mkdir -p /opt/menshun/scripts
+mkdir -p ${HOME}/opt/menshun/data/postgres
+mkdir -p ${HOME}/opt/menshun/data/redis
+mkdir -p ${HOME}/opt/menshun/data/static
+mkdir -p ${HOME}/opt/menshun/data/media
+mkdir -p ${HOME}/opt/menshun/logs
+mkdir -p ${HOME}/opt/menshun/logs/nginx
+mkdir -p ${HOME}/opt/menshun/backups
+mkdir -p ${HOME}/opt/menshun/ssl
+mkdir -p ${HOME}/opt/menshun/scripts
 
 # Set proper ownership
 print_status "Setting directory permissions..."
-sudo chown -R $USER:$USER /opt/menshun
-sudo chmod -R 755 /opt/menshun
+chmod -R 755 ${HOME}/opt/menshun
 
-# Check if .env.production already exists
-if [ -f .env.production ]; then
+# Check if .env already exists
+if [ -f .env ]; then
     print_warning "Production environment file already exists"
     read -p "Do you want to recreate it? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_status "Keeping existing .env.production file"
+        print_status "Keeping existing .env file"
         exit 0
     fi
 fi
@@ -215,10 +214,10 @@ echo "Gunicorn threads per worker (default: 2):"
 read -r GUNICORN_THREADS
 GUNICORN_THREADS=${GUNICORN_THREADS:-2}
 
-# Create .env.production file
-print_status "Creating .env.production file..."
+# Create .env file
+print_status "Creating .env file..."
 
-cat > .env.production << EOF
+cat > .env << EOF
 # Menshun PAM - Production Environment Configuration
 # Generated on $(date)
 
@@ -259,7 +258,7 @@ CSRF_COOKIE_SECURE=true
 EOF
 
 if [[ $CONFIGURE_ENTRA =~ ^[Yy]$ ]]; then
-    cat >> .env.production << EOF
+    cat >> .env << EOF
 AZURE_TENANT_ID=$AZURE_TENANT_ID
 AZURE_CLIENT_ID=$AZURE_CLIENT_ID
 AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET
@@ -271,7 +270,7 @@ MENSHEN_VAULT_EDITOR_GROUP=$VAULT_EDITOR_GROUP
 MENSHEN_VAULT_VIEWER_GROUP=$VAULT_VIEWER_GROUP
 EOF
 else
-    cat >> .env.production << EOF
+    cat >> .env << EOF
 AZURE_TENANT_ID=
 AZURE_CLIENT_ID=
 AZURE_CLIENT_SECRET=
@@ -284,7 +283,7 @@ MENSHEN_VAULT_VIEWER_GROUP=Menshen_Vault_Viewer
 EOF
 fi
 
-cat >> .env.production << EOF
+cat >> .env << EOF
 
 # =================================
 # Microsoft Sentinel Integration
@@ -293,7 +292,7 @@ SENTINEL_ENABLED=$SENTINEL_ENABLED
 EOF
 
 if [[ $CONFIGURE_SENTINEL =~ ^[Yy]$ ]]; then
-    cat >> .env.production << EOF
+    cat >> .env << EOF
 SENTINEL_WORKSPACE_ID=$SENTINEL_WORKSPACE_ID
 SENTINEL_DATA_COLLECTION_ENDPOINT=$SENTINEL_ENDPOINT
 SENTINEL_DATA_COLLECTION_RULE_ID=$SENTINEL_DCR_ID
@@ -307,7 +306,7 @@ SENTINEL_SEND_SERVICE_IDENTITY_EVENTS=true
 SENTINEL_SEND_PRIVILEGED_ACCESS_EVENTS=true
 EOF
 else
-    cat >> .env.production << EOF
+    cat >> .env << EOF
 SENTINEL_WORKSPACE_ID=
 SENTINEL_DATA_COLLECTION_ENDPOINT=
 SENTINEL_DATA_COLLECTION_RULE_ID=
@@ -322,7 +321,7 @@ SENTINEL_SEND_PRIVILEGED_ACCESS_EVENTS=true
 EOF
 fi
 
-cat >> .env.production << EOF
+cat >> .env << EOF
 
 # =================================
 # Email Configuration
@@ -330,7 +329,7 @@ cat >> .env.production << EOF
 EOF
 
 if [[ $CONFIGURE_EMAIL =~ ^[Yy]$ ]]; then
-    cat >> .env.production << EOF
+    cat >> .env << EOF
 EMAIL_HOST=$EMAIL_HOST
 EMAIL_PORT=$EMAIL_PORT
 EMAIL_HOST_USER=$EMAIL_USER
@@ -339,7 +338,7 @@ EMAIL_USE_TLS=true
 DEFAULT_FROM_EMAIL=$FROM_EMAIL
 EOF
 else
-    cat >> .env.production << EOF
+    cat >> .env << EOF
 EMAIL_HOST=
 EMAIL_PORT=587
 EMAIL_HOST_USER=
@@ -349,7 +348,7 @@ DEFAULT_FROM_EMAIL=noreply@menshun.local
 EOF
 fi
 
-cat >> .env.production << EOF
+cat >> .env << EOF
 
 # =================================
 # Performance Configuration
@@ -384,7 +383,7 @@ ENABLE_SERVICE_IDENTITIES=true
 EOF
 
 # Set secure permissions
-chmod 600 .env.production
+chmod 600 .env
 
 print_status "✅ Production environment configuration created successfully!"
 
@@ -435,5 +434,5 @@ echo "Entra ID: $([ -n "$AZURE_TENANT_ID" ] && echo "Configured" || echo "Not co
 echo "Sentinel: $([ "$SENTINEL_ENABLED" = "true" ] && echo "Enabled" || echo "Disabled")"
 echo "Email: $([ -n "$EMAIL_HOST" ] && echo "Configured" || echo "Not configured")"
 echo ""
-print_warning "Important: Keep your .env.production file secure and never commit it to version control!"
+print_warning "Important: Keep your .env file secure and never commit it to version control!"
 print_status "Next step: Run 'make deploy' to deploy the application"

@@ -30,11 +30,11 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # Variables
-COMPOSE_PROD = docker-compose -f docker-compose.prod.yml --env-file .env.production
+COMPOSE_PROD = docker-compose -f docker-compose.prod.yml
 COMPOSE_DEV = docker-compose -f docker-compose.yml
-BACKUP_DIR = /opt/menshun/backups
-LOG_DIR = /opt/menshun/logs
-ENV_FILE = .env.production
+BACKUP_DIR = $${HOME}/opt/menshun/backups
+LOG_DIR = $${HOME}/opt/menshun/logs
+ENV_FILE = .env
 
 # Colors for output
 RED = \033[0;31m
@@ -62,8 +62,8 @@ init: ## Initialize VM for first-time Menshun deployment
 	@echo "$(BLUE)Step 2/8:$(NC) Installing Docker and Docker Compose..."
 	@./scripts/install-docker.sh
 	@echo "$(BLUE)Step 3/8:$(NC) Creating directory structure..."
-	@sudo mkdir -p /opt/menshun/{data,logs,backups,ssl,config}
-	@sudo chown -R $$USER:$$USER /opt/menshun
+	@mkdir -p $${HOME}/opt/menshun/{data,logs,backups,ssl,config}
+	@mkdir -p $${HOME}/opt/menshun/data/{postgres,redis,static,media}
 	@echo "$(BLUE)Step 4/8:$(NC) Setting up environment configuration..."
 	@./scripts/setup-environment.sh
 	@echo "$(BLUE)Step 5/8:$(NC) Configuring Nginx reverse proxy..."
