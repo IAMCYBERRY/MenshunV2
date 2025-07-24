@@ -25,6 +25,10 @@ deploy:
 		echo "ERROR: .env file not found. Create it first."; \
 		exit 1; \
 	fi
+	@echo "Creating required directories..."
+	@mkdir -p $${HOME}/opt/menshun/data/{postgres,redis,static,media}
+	@mkdir -p $${HOME}/opt/menshun/{logs,backups,ssl}
+	@chmod -R 755 $${HOME}/opt/menshun
 	@echo "Building images..."
 	docker-compose -f docker-compose.prod.yml build
 	@echo "Starting services..."
