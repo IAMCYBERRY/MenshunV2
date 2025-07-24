@@ -6,14 +6,14 @@ services:
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-      - /opt/menshun/backups/postgres:/backups
+      - ${HOME}/opt/menshun/backups/postgres:/backups
     environment:
       POSTGRES_DB: ${DATABASE_NAME:-menshen_db}
       POSTGRES_USER: ${DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
-      - "127.0.0.1:5432:5432"  # Only bind to localhost
+      - "127.0.0.1:5436:5432"  # Only bind to localhost
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres}"]
       interval: 30s
@@ -46,7 +46,7 @@ services:
       - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
     command: redis-server /usr/local/etc/redis/redis.conf
     ports:
-      - "127.0.0.1:6379:6379"  # Only bind to localhost
+      - "127.0.0.1:6383:6379"  # Only bind to localhost
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -79,8 +79,8 @@ services:
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/media
-      - /opt/menshun/logs:/app/logs
-      - /opt/menshun/ssl:/app/ssl:ro
+      - ${HOME}/opt/menshun/logs:/app/logs
+      - ${HOME}/opt/menshun/ssl:/app/ssl:ro
     environment:
       # Django Settings
       - DJANGO_SETTINGS_MODULE=menshen.settings.production
@@ -150,7 +150,7 @@ services:
       - GUNICORN_MAX_REQUESTS_JITTER=${GUNICORN_MAX_REQUESTS_JITTER:-100}
       
     ports:
-      - "127.0.0.1:8000:8000"  # Only bind to localhost (behind Nginx)
+      - "127.0.0.1:8003:8000"  # Only bind to localhost (behind Nginx)
     depends_on:
       db:
         condition: service_healthy
@@ -188,7 +188,7 @@ services:
     command: celery -A menshen worker -l info --concurrency=4
     volumes:
       - media_files:/app/media
-      - /opt/menshun/logs:/app/logs
+      - ${HOME}/opt/menshun/logs:/app/logs
     environment:
       # Django Settings
       - DJANGO_SETTINGS_MODULE=menshen.settings.production
@@ -252,7 +252,7 @@ services:
     command: celery -A menshen beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - media_files:/app/media
-      - /opt/menshun/logs:/app/logs
+      - ${HOME}/opt/menshun/logs:/app/logs
     environment:
       # Django Settings
       - DJANGO_SETTINGS_MODULE=menshen.settings.production
@@ -306,10 +306,10 @@ services:
     volumes:
       - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./config/nginx/sites-available/menshun.conf:/etc/nginx/conf.d/menshun.conf:ro
-      - /opt/menshun/ssl:/etc/nginx/ssl:ro
+      - ${HOME}/opt/menshun/ssl:/etc/nginx/ssl:ro
       - static_files:/var/www/menshun/static:ro
       - media_files:/var/www/menshun/media:ro
-      - /opt/menshun/logs/nginx:/var/log/nginx
+      - ${HOME}/opt/menshun/logs/nginx:/var/log/nginx
     depends_on:
       - web
     networks:
@@ -341,7 +341,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.25.0.0/16
 
 volumes:
   postgres_data:
@@ -349,22 +349,22 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /opt/menshun/data/postgres
+      device: ${HOME}/opt/menshun/data/postgres
   redis_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /opt/menshun/data/redis
+      device: ${HOME}/opt/menshun/data/redis
   static_files:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /opt/menshun/data/static
+      device: ${HOME}/opt/menshun/data/static
   media_files:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /opt/menshun/data/media
+      device: ${HOME}/opt/menshun/data/media
