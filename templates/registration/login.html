@@ -73,7 +73,9 @@
             align-items: center;
             justify-content: center;
             position: relative;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: var(--space-md) 0;
         }
         
         /* Cyberpunk Grid Background */
@@ -109,9 +111,32 @@
             padding: var(--space-2xl);
             width: 100%;
             max-width: 450px;
+            max-height: calc(100vh - var(--space-md) * 2);
             box-shadow: var(--shadow-glow);
             position: relative;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
+            margin: var(--space-md);
+            flex-shrink: 0;
+        }
+        
+        /* Custom scrollbar styling */
+        .login-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .login-container::-webkit-scrollbar-track {
+            background: rgba(71, 85, 105, 0.3);
+            border-radius: 3px;
+        }
+        
+        .login-container::-webkit-scrollbar-thumb {
+            background: var(--electric-blue);
+            border-radius: 3px;
+        }
+        
+        .login-container::-webkit-scrollbar-thumb:hover {
+            background: #0284c7;
         }
         
         .login-container::before {

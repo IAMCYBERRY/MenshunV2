@@ -1,0 +1,990 @@
+{% extends 'menshun_base.html' %}
+
+{% block title %}Service Identities - Menshun PAM{% endblock %}
+
+{% block page_title %}Service Identities{% endblock %}
+{% block page_subtitle %}Manage Service Accounts and Service Principals{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-primary" onclick="openCreateServiceAccountModal()">
+    <i class="ph ph-plus"></i>
+    Create Service Account
+</button>
+<button class="btn btn-primary" onclick="openCreateServicePrincipalModal()">
+    <i class="ph ph-plus"></i>
+    Create Service Principal
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Metrics Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
+    <!-- Service Accounts Card -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <div>
+                <i class="ph ph-user-gear" style="font-size: 32px; color: var(--electric-blue); margin-bottom: var(--space-xs);"></i>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600;">Service Accounts</h3>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 32px; font-weight: 700; color: var(--pure-white);">{{ metrics.total_service_accounts }}</div>
+                <div style="font-size: 14px; color: var(--soft-grey);">Total Accounts</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--glass-border);">
+            <div style="flex: 1;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--emerald-green);">{{ metrics.active_service_accounts }}</div>
+                <div style="font-size: 12px; color: var(--soft-grey);">Active</div>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--amber-yellow);">{{ metrics.accounts_needing_rotation }}</div>
+                <div style="font-size: 12px; color: var(--soft-grey);">Need Rotation</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Principals Card -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <div>
+                <i class="ph ph-robot" style="font-size: 32px; color: var(--deep-purple); margin-bottom: var(--space-xs);"></i>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600;">Service Principals</h3>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 32px; font-weight: 700; color: var(--pure-white);">{{ metrics.total_service_principals }}</div>
+                <div style="font-size: 14px; color: var(--soft-grey);">Total Principals</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--glass-border);">
+            <div style="flex: 1;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--emerald-green);">{{ metrics.active_service_principals }}</div>
+                <div style="font-size: 12px; color: var(--soft-grey);">Active</div>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--slate-muted);">{{ metrics.total_service_principals|add:"-"|add:metrics.active_service_principals }}</div>
+                <div style="font-size: 12px; color: var(--soft-grey);">Inactive</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secrets Card -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <div>
+                <i class="ph ph-key" style="font-size: 32px; color: var(--amber-yellow); margin-bottom: var(--space-xs);"></i>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600;">Secrets</h3>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 32px; font-weight: 700; color: var(--pure-white);">{{ metrics.total_secrets }}</div>
+                <div style="font-size: 14px; color: var(--soft-grey);">Total Secrets</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--glass-border);">
+            <div style="flex: 1;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--amber-yellow);">{{ metrics.expiring_secrets }}</div>
+                <div style="font-size: 12px; color: var(--soft-grey);">Expiring Soon</div>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 20px; font-weight: 600; color: var(--crimson-red);">{{ metrics.expired_secrets }}</div>
+                <div style="font-size: 12px; color: var(--soft-grey);">Expired</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Service Accounts Table -->
+<div class="card" style="margin-bottom: var(--space-xl);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+        <h3 style="margin: 0; font-size: 20px; font-weight: 600;">Service Accounts</h3>
+        <input type="text" id="serviceAccountSearch" placeholder="Search service accounts..." 
+               style="width: 300px; padding: 8px 16px; background: var(--slate-secondary); border: 1px solid var(--glass-border); 
+                      border-radius: var(--radius-sm); color: var(--pure-white); font-size: 14px;">
+    </div>
+    
+    <div style="overflow-x: auto;">
+        <table id="serviceAccountsTable" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="border-bottom: 1px solid var(--glass-border);">
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Employee ID</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Service Name</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Type</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Status</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Manager</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Next Rotation</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in service_accounts %}
+                <tr style="border-bottom: 1px solid rgba(71, 85, 105, 0.3); transition: background 0.2s;">
+                    <td style="padding: 12px;">
+                        <span style="font-family: monospace; color: var(--electric-blue);">{{ account.employee_id }}</span>
+                    </td>
+                    <td style="padding: 12px;">
+                        <div style="font-weight: 500;">{{ account.service_name }}</div>
+                        <div style="font-size: 12px; color: var(--soft-grey);">{{ account.user_principal_name }}</div>
+                    </td>
+                    <td style="padding: 12px;">
+                        <span style="background: rgba(14, 165, 233, 0.2); color: var(--electric-blue); 
+                                   padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                            {{ account.get_account_type_display }}
+                        </span>
+                    </td>
+                    <td style="padding: 12px;">
+                        {% if account.status == 'ACTIVE' %}
+                            <span style="color: var(--emerald-green);"><i class="ph ph-check-circle"></i> Active</span>
+                        {% elif account.status == 'DISABLED' %}
+                            <span style="color: var(--slate-muted);"><i class="ph ph-x-circle"></i> Disabled</span>
+                        {% elif account.status == 'EXPIRED' %}
+                            <span style="color: var(--crimson-red);"><i class="ph ph-warning-circle"></i> Expired</span>
+                        {% else %}
+                            <span style="color: var(--amber-yellow);"><i class="ph ph-clock"></i> {{ account.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 12px;">
+                        {% if account.manager %}
+                            {{ account.manager.display_name }}
+                        {% else %}
+                            <span style="color: var(--slate-muted);">No manager</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 12px;">
+                        {% if account.next_rotation_date %}
+                            {% if account.needs_password_rotation %}
+                                <span style="color: var(--crimson-red);">
+                                    <i class="ph ph-warning"></i> Overdue
+                                </span>
+                            {% else %}
+                                {{ account.next_rotation_date|date:"M d, Y" }}
+                            {% endif %}
+                        {% else %}
+                            <span style="color: var(--slate-muted);">Not set</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 12px;">
+                        <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" 
+                                onclick="viewServiceAccount('{{ account.id }}')">
+                            <i class="ph ph-eye"></i> View
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="padding: 48px; text-align: center; color: var(--slate-muted);">
+                        <i class="ph ph-empty" style="font-size: 48px; opacity: 0.5; display: block; margin-bottom: 16px;"></i>
+                        No service accounts found
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Service Principals Table -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+        <h3 style="margin: 0; font-size: 20px; font-weight: 600;">Service Principals</h3>
+        <input type="text" id="servicePrincipalSearch" placeholder="Search service principals..." 
+               style="width: 300px; padding: 8px 16px; background: var(--slate-secondary); border: 1px solid var(--glass-border); 
+                      border-radius: var(--radius-sm); color: var(--pure-white); font-size: 14px;">
+    </div>
+    
+    <div style="overflow-x: auto;">
+        <table id="servicePrincipalsTable" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="border-bottom: 1px solid var(--glass-border);">
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Application Name</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Type</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Client ID</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Status</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Secrets</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Owner</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: var(--soft-grey);">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for principal in service_principals %}
+                <tr style="border-bottom: 1px solid rgba(71, 85, 105, 0.3); transition: background 0.2s;">
+                    <td style="padding: 12px;">
+                        <div style="font-weight: 500;">{{ principal.application_name }}</div>
+                        <div style="font-size: 12px; color: var(--soft-grey);">{{ principal.description|truncatewords:10 }}</div>
+                    </td>
+                    <td style="padding: 12px;">
+                        <span style="background: rgba(124, 58, 237, 0.2); color: var(--deep-purple); 
+                                   padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                            {{ principal.get_application_type_display }}
+                        </span>
+                    </td>
+                    <td style="padding: 12px;">
+                        <span style="font-family: monospace; font-size: 12px; color: var(--soft-grey);">
+                            {{ principal.client_id|truncatechars:20 }}
+                        </span>
+                    </td>
+                    <td style="padding: 12px;">
+                        {% if principal.status == 'ACTIVE' %}
+                            <span style="color: var(--emerald-green);"><i class="ph ph-check-circle"></i> Active</span>
+                        {% elif principal.status == 'DISABLED' %}
+                            <span style="color: var(--slate-muted);"><i class="ph ph-x-circle"></i> Disabled</span>
+                        {% else %}
+                            <span style="color: var(--amber-yellow);"><i class="ph ph-clock"></i> {{ principal.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 12px;">
+                        {% with secret_count=principal.secrets.count %}
+                            {% if secret_count > 0 %}
+                                <span style="color: var(--electric-blue);">{{ secret_count }} secret{{ secret_count|pluralize }}</span>
+                            {% else %}
+                                <span style="color: var(--slate-muted);">No secrets</span>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td style="padding: 12px;">
+                        {{ principal.owner.get_full_name|default:principal.owner.username }}
+                    </td>
+                    <td style="padding: 12px;">
+                        <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" 
+                                onclick="viewServicePrincipal('{{ principal.id }}')">
+                            <i class="ph ph-eye"></i> View
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="padding: 48px; text-align: center; color: var(--slate-muted);">
+                        <i class="ph ph-empty" style="font-size: 48px; opacity: 0.5; display: block; margin-bottom: 16px;"></i>
+                        No service principals found
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// Search functionality
+document.getElementById('serviceAccountSearch').addEventListener('keyup', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const table = document.getElementById('serviceAccountsTable');
+    const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+    
+    for (let row of rows) {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    }
+});
+
+document.getElementById('servicePrincipalSearch').addEventListener('keyup', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const table = document.getElementById('servicePrincipalsTable');
+    const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+    
+    for (let row of rows) {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    }
+});
+
+// Global variable to store the default domain
+let defaultDomain = null;
+
+// Modal functions
+function openCreateServiceAccountModal() {
+    const modal = document.getElementById('createServiceAccountModal');
+    modal.style.display = 'flex';
+    
+    // Fetch next employee ID and default domain
+    Promise.all([
+        fetch("{% url 'vault:ajax_get_next_employee_id' %}").then(response => response.json()),
+        fetch("{% url 'vault:ajax_get_default_domain' %}").then(response => response.json())
+    ])
+    .then(([employeeData, domainData]) => {
+        if (employeeData.success) {
+            document.getElementById('employeeIdPreview').textContent = employeeData.employee_id;
+        }
+        if (domainData.success) {
+            defaultDomain = domainData.domain;
+            document.getElementById('domainHint').textContent = `Type the username prefix (e.g., "service.account") - @${defaultDomain} will be auto-added`;
+            document.getElementById('userPrincipalNameInput').placeholder = `service.account (will become service.account@${defaultDomain})`;
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching modal data:', error);
+    });
+}
+
+function closeCreateServiceAccountModal() {
+    document.getElementById('createServiceAccountModal').style.display = 'none';
+    document.getElementById('createServiceAccountForm').reset();
+    document.getElementById('managerSearchResults').innerHTML = '';
+    document.getElementById('selectedManagerInfo').style.display = 'none';
+}
+
+function openCreateServicePrincipalModal() {
+    const modal = document.getElementById('createServicePrincipalModal');
+    modal.style.display = 'flex';
+}
+
+function closeCreateServicePrincipalModal() {
+    document.getElementById('createServicePrincipalModal').style.display = 'none';
+    document.getElementById('createServicePrincipalForm').reset();
+    document.getElementById('redirectUrisList').innerHTML = '';
+    document.getElementById('serviceAccountSearchResults').innerHTML = '';
+    document.getElementById('selectedServiceAccountInfo').style.display = 'none';
+}
+
+function viewServiceAccount(accountId) {
+    alert('View Service Account details for ID: ' + accountId);
+}
+
+function viewServicePrincipal(principalId) {
+    alert('View Service Principal details for ID: ' + principalId);
+}
+
+// Manager search functionality
+let searchTimeout;
+function searchManagers() {
+    clearTimeout(searchTimeout);
+    const searchTerm = document.getElementById('managerSearch').value;
+    
+    if (searchTerm.length < 2) {
+        document.getElementById('managerSearchResults').innerHTML = '';
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch(`{% url 'vault:ajax_search_managers' %}?q=${encodeURIComponent(searchTerm)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById('managerSearchResults');
+                resultsDiv.innerHTML = '';
+                
+                if (data.users && data.users.length > 0) {
+                    data.users.forEach(user => {
+                        const userDiv = document.createElement('div');
+                        userDiv.style.cssText = 'padding: 8px; cursor: pointer; border-bottom: 1px solid var(--glass-border); transition: background 0.2s;';
+                        userDiv.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 500;">${user.display_name}</div>
+                                    <div style="font-size: 12px; color: var(--soft-grey);">${user.email || user.user_principal_name}</div>
+                                </div>
+                                <div style="font-size: 10px; color: var(--slate-muted); padding: 2px 6px; 
+                                           background: rgba(71, 85, 105, 0.3); border-radius: 4px;">
+                                    ${user.source || 'User'}
+                                </div>
+                            </div>
+                        `;
+                        userDiv.onmouseover = () => userDiv.style.background = 'rgba(14, 165, 233, 0.1)';
+                        userDiv.onmouseout = () => userDiv.style.background = '';
+                        userDiv.onclick = () => selectManager(user);
+                        resultsDiv.appendChild(userDiv);
+                    });
+                } else {
+                    resultsDiv.innerHTML = '<div style="padding: 8px; color: var(--slate-muted);">No users found</div>';
+                }
+            });
+    }, 300);
+}
+
+function selectManager(user) {
+    document.getElementById('managerId').value = user.id;
+    document.getElementById('managerSearch').value = user.display_name;
+    document.getElementById('selectedManagerInfo').style.display = 'block';
+    document.getElementById('selectedManagerName').textContent = user.display_name;
+    document.getElementById('selectedManagerEmail').textContent = user.email || user.user_principal_name;
+    document.getElementById('managerSearchResults').innerHTML = '';
+}
+
+// UPN auto-completion functions
+function handleUPNInput(input) {
+    if (!defaultDomain) return;
+    
+    let value = input.value;
+    
+    // Remove existing domain if present
+    if (value.includes('@')) {
+        value = value.split('@')[0];
+    }
+    
+    // Show preview in placeholder
+    if (value.length > 0) {
+        input.placeholder = `${value}@${defaultDomain}`;
+    } else {
+        input.placeholder = `service.account (will become service.account@${defaultDomain})`;
+    }
+}
+
+function finalizeUPNInput(input) {
+    if (!defaultDomain) return;
+    
+    let value = input.value.trim();
+    
+    // Only add domain if there's a value and no @ symbol
+    if (value.length > 0 && !value.includes('@')) {
+        input.value = `${value}@${defaultDomain}`;
+    }
+}
+
+// Create Service Account
+function createServiceAccount() {
+    const form = document.getElementById('createServiceAccountForm');
+    const formData = new FormData(form);
+    
+    // Show loading state
+    const submitBtn = document.getElementById('createServiceAccountBtn');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Creating...';
+    submitBtn.disabled = true;
+    
+    fetch("{% url 'vault:ajax_create_service_account' %}", {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeCreateServiceAccountModal();
+            // Reload the page to show the new service account
+            window.location.reload();
+        } else {
+            alert('Error creating service account: ' + (data.error || 'Unknown error'));
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Error creating service account: ' + error);
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+}
+
+// Service Principal Functions
+function toggleApplicationTypeFields() {
+    const appType = document.querySelector('[name="application_type"]').value;
+    const homePageGroup = document.getElementById('homePageUrlGroup');
+    const redirectUrisGroup = document.getElementById('redirectUrisGroup');
+    
+    // Show/hide fields based on application type
+    if (appType === 'daemon') {
+        homePageGroup.style.display = 'none';
+        redirectUrisGroup.style.display = 'none';
+    } else {
+        homePageGroup.style.display = 'block';
+        redirectUrisGroup.style.display = 'block';
+    }
+}
+
+let redirectUris = [];
+
+function addRedirectUri() {
+    const input = document.getElementById('redirectUriInput');
+    const uri = input.value.trim();
+    
+    if (uri && !redirectUris.includes(uri)) {
+        redirectUris.push(uri);
+        updateRedirectUrisList();
+        input.value = '';
+    }
+}
+
+function removeRedirectUri(uri) {
+    redirectUris = redirectUris.filter(u => u !== uri);
+    updateRedirectUrisList();
+}
+
+function updateRedirectUrisList() {
+    const listDiv = document.getElementById('redirectUrisList');
+    const dataInput = document.getElementById('redirectUrisData');
+    
+    listDiv.innerHTML = '';
+    redirectUris.forEach(uri => {
+        const uriDiv = document.createElement('div');
+        uriDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px; margin-bottom: 4px; background: rgba(71, 85, 105, 0.3); border-radius: 4px; font-size: 12px;';
+        uriDiv.innerHTML = `
+            <span>${uri}</span>
+            <button type="button" onclick="removeRedirectUri('${uri}')" style="background: none; border: none; color: var(--crimson-red); cursor: pointer; padding: 4px;">
+                <i class="ph ph-x"></i>
+            </button>
+        `;
+        listDiv.appendChild(uriDiv);
+    });
+    
+    dataInput.value = JSON.stringify(redirectUris);
+}
+
+// Service Account search for linking
+let serviceAccountSearchTimeout;
+function searchServiceAccounts() {
+    clearTimeout(serviceAccountSearchTimeout);
+    const searchTerm = document.getElementById('serviceAccountSearch').value;
+    
+    if (searchTerm.length < 2) {
+        document.getElementById('serviceAccountSearchResults').innerHTML = '';
+        return;
+    }
+    
+    serviceAccountSearchTimeout = setTimeout(() => {
+        fetch(`{% url 'vault:ajax_search_service_accounts' %}?q=${encodeURIComponent(searchTerm)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById('serviceAccountSearchResults');
+                resultsDiv.innerHTML = '';
+                
+                if (data.success && data.service_accounts && data.service_accounts.length > 0) {
+                    data.service_accounts.forEach(account => {
+                        const accountDiv = document.createElement('div');
+                        accountDiv.style.cssText = 'padding: 8px; cursor: pointer; border-bottom: 1px solid var(--glass-border); transition: background 0.2s;';
+                        accountDiv.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 500;">${account.service_name}</div>
+                                    <div style="font-size: 12px; color: var(--soft-grey);">${account.employee_id} - ${account.user_principal_name}</div>
+                                </div>
+                                <div style="font-size: 10px; color: var(--slate-muted); padding: 2px 6px; 
+                                           background: rgba(71, 85, 105, 0.3); border-radius: 4px;">
+                                    Service Account
+                                </div>
+                            </div>
+                        `;
+                        accountDiv.onmouseover = () => accountDiv.style.background = 'rgba(124, 58, 237, 0.1)';
+                        accountDiv.onmouseout = () => accountDiv.style.background = '';
+                        accountDiv.onclick = () => selectServiceAccount(account);
+                        resultsDiv.appendChild(accountDiv);
+                    });
+                } else {
+                    resultsDiv.innerHTML = '<div style="padding: 8px; color: var(--slate-muted);">No service accounts found</div>';
+                }
+            });
+    }, 300);
+}
+
+function selectServiceAccount(account) {
+    document.getElementById('serviceAccountId').value = account.id;
+    document.getElementById('serviceAccountSearch').value = account.service_name;
+    document.getElementById('selectedServiceAccountInfo').style.display = 'block';
+    document.getElementById('selectedServiceAccountName').textContent = account.service_name;
+    document.getElementById('selectedServiceAccountUPN').textContent = account.user_principal_name;
+    document.getElementById('serviceAccountSearchResults').innerHTML = '';
+}
+
+// Get CSRF token helper function
+function getCSRFToken() {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, 10) === 'csrftoken=') {
+                cookieValue = decodeURIComponent(cookie.substring(10));
+                break;
+            }
+        }
+    }
+    return cookieValue || '{{ csrf_token }}';
+}
+
+// Owner search functions
+let ownerSearchTimeout;
+function searchOwners(query) {
+    clearTimeout(ownerSearchTimeout);
+    
+    if (query.length < 2) {
+        document.getElementById('ownerSearchResults').innerHTML = '';
+        return;
+    }
+    
+    ownerSearchTimeout = setTimeout(() => {
+        fetch(`{% url 'vault:ajax_search_managers' %}?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById('ownerSearchResults');
+                if (data.success && data.users.length > 0) {
+                    let html = '<div class="glass" style="padding: 8px; max-height: 200px; overflow-y: auto;">';
+                    data.users.forEach(user => {
+                        html += `
+                            <div onclick="selectOwner('${user.id}', '${user.display_name}', '${user.email || user.user_principal_name}')" 
+                                 style="padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px;
+                                        transition: background 0.2s;" 
+                                 onmouseover="this.style.background='rgba(14, 165, 233, 0.1)'"
+                                 onmouseout="this.style.background='transparent'">
+                                <strong>${user.display_name}</strong>
+                                <br><small style="color: var(--soft-grey);">${user.email || user.user_principal_name}</small>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    resultsDiv.innerHTML = html;
+                } else {
+                    resultsDiv.innerHTML = '<div class="glass" style="padding: 12px; text-align: center; color: var(--soft-grey);">No users found</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error searching owners:', error);
+                document.getElementById('ownerSearchResults').innerHTML = 
+                    '<div class="glass" style="padding: 12px; text-align: center; color: var(--crimson-red);">Error searching users</div>';
+            });
+    }, 300);
+}
+
+function selectOwner(userId, displayName, email) {
+    document.getElementById('selectedOwnerId').value = userId;
+    document.getElementById('selectedOwnerName').textContent = displayName;
+    document.getElementById('selectedOwnerEmail').textContent = email;
+    document.getElementById('selectedOwnerDisplay').style.display = 'block';
+    document.getElementById('ownerSearch').value = displayName;
+    document.getElementById('ownerSearchResults').innerHTML = '';
+}
+
+function clearOwnerSelection() {
+    document.getElementById('selectedOwnerId').value = '';
+    document.getElementById('selectedOwnerDisplay').style.display = 'none';
+    document.getElementById('ownerSearch').value = '';
+    document.getElementById('ownerSearchResults').innerHTML = '';
+}
+
+// Create Service Principal
+function createServicePrincipal() {
+    const form = document.getElementById('createServicePrincipalForm');
+    const formData = new FormData(form);
+    
+    // Convert FormData to JSON
+    const data = {};
+    for (let [key, value] of formData.entries()) {
+        if (key === 'redirect_uris') {
+            // Handle redirect URIs array
+            data.redirect_uris = [];
+            const redirectUriInputs = form.querySelectorAll('input[name="redirect_uris"]');
+            redirectUriInputs.forEach(input => {
+                if (input.value.trim()) {
+                    data.redirect_uris.push(input.value.trim());
+                }
+            });
+        } else {
+            data[key] = value;
+        }
+    }
+    
+    // Show loading state
+    const submitBtn = document.getElementById('createServicePrincipalBtn');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> Creating...';
+    submitBtn.disabled = true;
+    
+    fetch("{% url 'vault:ajax_create_service_principal' %}", {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeCreateServicePrincipalModal();
+            // Reload the page to show the new service principal
+            window.location.reload();
+        } else {
+            alert('Error creating service principal: ' + (data.error || 'Unknown error'));
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Error creating service principal: ' + error);
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+}
+</script>
+
+<!-- Create Service Account Modal -->
+<div id="createServiceAccountModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+     background: rgba(0, 0, 0, 0.8); z-index: 9999; align-items: center; justify-content: center; padding: 32px;">
+    <div style="background: var(--dark-slate-sidebar); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); 
+         width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto;">
+        <!-- Modal Header -->
+        <div style="padding: var(--space-lg); border-bottom: 1px solid var(--glass-border); 
+             display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 700;">Create Service Account</h2>
+            <button onclick="closeCreateServiceAccountModal()" 
+                    style="background: none; border: none; color: var(--soft-grey); font-size: 24px; cursor: pointer;">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        
+        <!-- Modal Body -->
+        <div style="padding: var(--space-lg);">
+            <form id="createServiceAccountForm">
+                <!-- Employee ID Preview -->
+                <div class="form-group">
+                    <label class="form-label">Employee ID</label>
+                    <div style="padding: 12px 16px; background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3); 
+                         border-radius: var(--radius-sm); font-family: monospace; font-size: 16px; color: var(--electric-blue);">
+                        <i class="ph ph-fingerprint"></i> <span id="employeeIdPreview">SA00001</span>
+                        <span style="float: right; font-size: 12px; color: var(--soft-grey);">Auto-generated</span>
+                    </div>
+                </div>
+                
+                <!-- Service Name -->
+                <div class="form-group">
+                    <label class="form-label">Service Name <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="text" name="service_name" class="form-input" required 
+                           placeholder="e.g., Azure Backup Service, Monitoring Agent">
+                </div>
+                
+                <!-- User Principal Name -->
+                <div class="form-group">
+                    <label class="form-label">User Principal Name <span style="color: var(--crimson-red);">*</span></label>
+                    <div style="position: relative;">
+                        <input type="email" id="userPrincipalNameInput" name="user_principal_name" class="form-input" required 
+                               placeholder="service.account" 
+                               onkeyup="handleUPNInput(this)" 
+                               onblur="finalizeUPNInput(this)">
+                        <div style="font-size: 12px; color: var(--soft-grey); margin-top: 4px;">
+                            <span id="domainHint">Type the username prefix (e.g., "service.account") - domain will be auto-added</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Display Name -->
+                <div class="form-group">
+                    <label class="form-label">Display Name <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="text" name="display_name" class="form-input" required 
+                           placeholder="Service Account - Azure Backup">
+                </div>
+                
+                <!-- Description -->
+                <div class="form-group">
+                    <label class="form-label">Description <span style="color: var(--crimson-red);">*</span></label>
+                    <textarea name="description" class="form-input" required rows="3" 
+                              placeholder="Describe the purpose and usage of this service account..."></textarea>
+                </div>
+                
+                <!-- Account Type -->
+                <div class="form-group">
+                    <label class="form-label">Account Type <span style="color: var(--crimson-red);">*</span></label>
+                    <select name="account_type" class="form-input" required>
+                        <option value="AUTOMATION">Automation Account</option>
+                        <option value="INTEGRATION">Integration Account</option>
+                        <option value="MONITORING">Monitoring Account</option>
+                        <option value="BACKUP">Backup Account</option>
+                        <option value="API">API Service Account</option>
+                    </select>
+                </div>
+                
+                <!-- Department -->
+                <div class="form-group">
+                    <label class="form-label">Department</label>
+                    <input type="text" name="department" class="form-input" 
+                           placeholder="e.g., IT Operations, DevOps">
+                </div>
+                
+                <!-- Manager Search -->
+                <div class="form-group">
+                    <label class="form-label">Manager <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="hidden" id="managerId" name="manager_id" required>
+                    <input type="text" id="managerSearch" class="form-input" onkeyup="searchManagers()" 
+                           placeholder="Search for manager by name or email..." autocomplete="off">
+                    <div id="managerSearchResults" style="background: var(--slate-secondary); border: 1px solid var(--glass-border); 
+                         border-radius: var(--radius-sm); margin-top: 4px; max-height: 200px; overflow-y: auto; display: none;"></div>
+                    
+                    <!-- Selected Manager Info -->
+                    <div id="selectedManagerInfo" style="display: none; margin-top: 8px; padding: 8px; 
+                         background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: var(--radius-sm);">
+                        <div style="font-size: 12px; color: var(--soft-grey);">Selected Manager:</div>
+                        <div id="selectedManagerName" style="font-weight: 500;"></div>
+                        <div id="selectedManagerEmail" style="font-size: 12px; color: var(--soft-grey);"></div>
+                    </div>
+                </div>
+                
+                <!-- Auto-generated fields info -->
+                <div style="margin-top: var(--space-lg); padding: 16px; background: rgba(245, 158, 11, 0.1); 
+                     border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-sm);">
+                    <div style="font-weight: 600; color: var(--amber-yellow); margin-bottom: 8px;">
+                        <i class="ph ph-info"></i> Auto-generated Fields
+                    </div>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: var(--soft-grey);">
+                        <li>Job Title: <strong>Service Account</strong></li>
+                        <li>Employee Type: <strong>Automation</strong></li>
+                        <li>Initial Password: <strong>Auto-generated and vaulted</strong></li>
+                        <li>Password Rotation: <strong>Every 90 days</strong></li>
+                    </ul>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Modal Footer -->
+        <div style="padding: var(--space-lg); border-top: 1px solid var(--glass-border); 
+             display: flex; justify-content: flex-end; gap: var(--space-sm);">
+            <button class="btn btn-secondary" onclick="closeCreateServiceAccountModal()">Cancel</button>
+            <button id="createServiceAccountBtn" class="btn btn-primary" onclick="createServiceAccount()">
+                <i class="ph ph-plus"></i> Create Service Account
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Service Principal Modal -->
+<div id="createServicePrincipalModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+     background: rgba(0, 0, 0, 0.8); z-index: 9999; align-items: center; justify-content: center; padding: 32px;">
+    <div style="background: var(--dark-slate-sidebar); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); 
+         width: 100%; max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <!-- Modal Header -->
+        <div style="padding: var(--space-lg); border-bottom: 1px solid var(--glass-border); 
+             display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 700;">Create Service Principal</h2>
+            <button onclick="closeCreateServicePrincipalModal()" 
+                    style="background: none; border: none; color: var(--soft-grey); font-size: 24px; cursor: pointer;">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        
+        <!-- Modal Body -->
+        <div style="padding: var(--space-lg);">
+            <form id="createServicePrincipalForm">
+                <!-- Application Name -->
+                <div class="form-group">
+                    <label class="form-label">Application Name <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="text" name="application_name" class="form-input" required 
+                           placeholder="e.g., MyApp API, Backup Service App">
+                </div>
+                
+                <!-- Application Type -->
+                <div class="form-group">
+                    <label class="form-label">Application Type</label>
+                    <select name="application_type" class="form-input" onchange="toggleApplicationTypeFields()">
+                        <option value="web">Web Application (Default)</option>
+                        <option value="spa">Single Page Application</option>
+                        <option value="mobile">Mobile/Native Application</option>
+                        <option value="daemon">Daemon/Service Application</option>
+                    </select>
+                </div>
+                
+                <!-- Owner -->
+                <div class="form-group">
+                    <label class="form-label">Owner <span style="color: var(--crimson-red);">*</span></label>
+                    <input type="text" id="ownerSearch" class="form-input" required
+                           placeholder="Search for owner by name or email..."
+                           onkeyup="searchOwners(this.value)">
+                    <input type="hidden" name="owner_id" id="selectedOwnerId" required>
+                    <div id="ownerSearchResults" style="margin-top: 8px;"></div>
+                    <div id="selectedOwnerDisplay" style="margin-top: 8px; display: none;">
+                        <div class="glass" style="padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong id="selectedOwnerName"></strong>
+                                <br><small id="selectedOwnerEmail" style="color: var(--soft-grey);"></small>
+                            </div>
+                            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" 
+                                    onclick="clearOwnerSelection()">
+                                <i class="ph ph-x"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Description -->
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input" rows="3" 
+                              placeholder="Describe the purpose and usage of this service principal..."></textarea>
+                </div>
+                
+                <!-- Client Secret Expiration -->
+                <div class="form-group">
+                    <label class="form-label">Client Secret Expiration <span style="color: var(--crimson-red);">*</span></label>
+                    <select name="secret_expiration_months" class="form-input" required>
+                        <option value="6" selected>6 months (Default)</option>
+                        <option value="3">3 months</option>
+                        <option value="12">12 months</option>
+                        <option value="18">18 months</option>
+                        <option value="24">24 months (Maximum)</option>
+                    </select>
+                    <div style="font-size: 12px; color: var(--soft-grey); margin-top: 4px;">
+                        The client secret will expire after the selected duration and will need to be rotated.
+                    </div>
+                </div>
+                
+                <!-- Home Page URL -->
+                <div class="form-group" id="homePageUrlGroup">
+                    <label class="form-label">Home Page URL</label>
+                    <input type="url" name="home_page_url" class="form-input" 
+                           placeholder="https://myapp.company.com">
+                </div>
+                
+                <!-- Redirect URIs -->
+                <div class="form-group" id="redirectUrisGroup">
+                    <label class="form-label">Redirect URIs</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="url" id="redirectUriInput" class="form-input" 
+                               placeholder="https://myapp.company.com/auth/callback" style="flex: 1;">
+                        <button type="button" class="btn btn-secondary" onclick="addRedirectUri()" 
+                                style="padding: 8px 16px; font-size: 14px;">
+                            <i class="ph ph-plus"></i> Add
+                        </button>
+                    </div>
+                    <div id="redirectUrisList"></div>
+                    <input type="hidden" name="redirect_uris" id="redirectUrisData">
+                </div>
+                
+                <!-- Service Account Linking -->
+                <div class="form-group">
+                    <label class="form-label">Link to Service Account (Optional)</label>
+                    <input type="hidden" id="serviceAccountId" name="service_account_id">
+                    <input type="text" id="serviceAccountSearch" class="form-input" onkeyup="searchServiceAccounts()" 
+                           placeholder="Search for service account to link..." autocomplete="off">
+                    <div id="serviceAccountSearchResults" style="background: var(--slate-secondary); border: 1px solid var(--glass-border); 
+                         border-radius: var(--radius-sm); margin-top: 4px; max-height: 200px; overflow-y: auto; display: none;"></div>
+                    
+                    <!-- Selected Service Account Info -->
+                    <div id="selectedServiceAccountInfo" style="display: none; margin-top: 8px; padding: 8px; 
+                         background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-sm);">
+                        <div style="font-size: 12px; color: var(--soft-grey);">Linked Service Account:</div>
+                        <div id="selectedServiceAccountName" style="font-weight: 500;"></div>
+                        <div id="selectedServiceAccountUPN" style="font-size: 12px; color: var(--soft-grey);"></div>
+                    </div>
+                </div>
+                
+                <!-- Auto-generated info -->
+                <div style="margin-top: var(--space-lg); padding: 16px; background: rgba(124, 58, 237, 0.1); 
+                     border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-sm);">
+                    <div style="font-weight: 600; color: var(--deep-purple); margin-bottom: 8px;">
+                        <i class="ph ph-info"></i> Auto-generated
+                    </div>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: var(--soft-grey);">
+                        <li><strong>Client ID</strong>: Automatically generated by Entra ID</li>
+                        <li><strong>Client Secret</strong>: Auto-generated and stored in vault</li>
+                        <li><strong>Tenant ID</strong>: Retrieved from Entra configuration</li>
+                        <li><strong>Secret Expiry</strong>: Set to 24 months with rotation alerts</li>
+                    </ul>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Modal Footer -->
+        <div style="padding: var(--space-lg); border-top: 1px solid var(--glass-border); 
+             display: flex; justify-content: flex-end; gap: var(--space-sm);">
+            <button class="btn btn-secondary" onclick="closeCreateServicePrincipalModal()">Cancel</button>
+            <button id="createServicePrincipalBtn" class="btn btn-primary" onclick="createServicePrincipal()">
+                <i class="ph ph-plus"></i> Create Service Principal
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+#managerSearchResults:not(:empty) {
+    display: block !important;
+}
+
+#serviceAccountSearchResults:not(:empty) {
+    display: block !important;
+}
+</style>
+{% endblock %}

@@ -3643,11 +3643,8 @@
             '</div>' +
             
             // Admin List
-            '<div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">' +
+            '<div style="margin-bottom: 16px;">' +
                 '<h4 style="color: white; font-size: 18px; font-weight: 600; margin: 0;">Admin Accounts (' + accounts.length + ')</h4>' +
-                '<button onclick="createTestAdminLogs()" style="padding: 8px 16px; background: #0ea5e9; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 14px;">' +
-                    '<i class="ph ph-plus" style="margin-right: 4px;"></i>Create Test Data' +
-                '</button>' +
             '</div>' +
             '<div style="max-height: 400px; overflow-y: auto;">' +
                 (accounts.length > 0 ? 
@@ -3701,7 +3698,7 @@
         return cookieValue;
     }
 
-    function openAdminDetailsModal(username) {
+    window.openAdminDetailsModalFull = function(username) {
         console.log('Opening admin details for:', username);
         
         // Create admin details modal
@@ -3884,6 +3881,10 @@
             
             <!-- Action Buttons -->
             <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid rgba(71, 85, 105, 0.3); padding-top: 20px;">
+                <button onclick="assignAdminRoles('${user.userPrincipalName}')" style="padding: 10px 20px; background: #7c3aed; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500;">
+                    <i class="ph ph-user-gear" style="margin-right: 6px;"></i>
+                    Assign Roles
+                </button>
                 <button onclick="resetAdminPassword('${user.userPrincipalName}')" style="padding: 10px 20px; background: #f59e0b; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500;">
                     <i class="ph ph-key" style="margin-right: 6px;"></i>
                     Reset Password
@@ -4075,6 +4076,19 @@
         });
     }
     
+    function assignAdminRoles(userPrincipalName) {
+        // Close the admin details modal
+        closeAdminDetailsModal();
+        
+        // Open the role management modal with the user pre-selected
+        currentEntraUser = { userPrincipalName: userPrincipalName };
+        openRoleModal();
+        
+        // Search for the user
+        document.getElementById('entraUserSearch').value = userPrincipalName;
+        searchEntraUsers();
+    }
+    
     function editRoleAssignment(roleId) {
         showNotification('Role assignment editing coming soon!', 'info');
     }
@@ -4125,7 +4139,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 10000;
+            z-index: 1000001;
         `;
         
         editModal.innerHTML = `

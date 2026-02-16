@@ -6,7 +6,8 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_http_methods
-from django.db import models
+from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework import viewsets, status, filters
@@ -17,8 +18,9 @@ from django_filters.rest_framework import DjangoFilterBackend
 import json
 import logging
 
-from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog
-from .audit import AuditLogger
+from .models import VaultEntry, CredentialType, VaultAccessLog, SystemAuditLog, EntraUser, EntraRole, EntraRoleAssignment, ServiceAccount, ServicePrincipal, ServicePrincipalSecret
+from .audit import AuditLogger, run_sentinel_async
+from .sentinel_integration import get_sentinel_service
 from .forms import VaultEntryForm, CredentialTypeForm
 from .serializers import (
     VaultEntryListSerializer, VaultEntryDetailSerializer,
@@ -2231,11 +2233,31 @@ def cloud_admins(request):
                 'vault_entry_id': admin.get('vault_entry_id')
             })
         
+        # Calculate vault entry statistics
+        with_vault = len([a for a in accounts if a['has_vault_entry']])
+        without_vault = len(accounts) - with_vault
+        
+        # Transform accounts to match the expected format for the global modal
+        transformed_admins = []
+        for account in accounts:
+            transformed_admins.append({
+                'username': account['username'],
+                'display_name': account['account_name'],
+                'platform': account['platform'],
+                'has_vault_entry': account['has_vault_entry'],
+                'vault_entry_id': account['vault_entry_id']
+            })
+        
         return JsonResponse({
             'success': True,
             'stats': stats,
             'accounts': accounts,
-            'total_count': len(accounts)
+            'total_count': len(accounts),
+            # Add fields expected by the global modal
+            'total_admins': len(accounts),
+            'with_vault_entries': with_vault,
+            'without_vault_entries': without_vault,
+            'admins': transformed_admins
         })
         
     except Exception as e:
@@ -2666,3 +2688,1066 @@ def update_admin_account(request, username):
             'success': False,
             'error': 'Failed to update account'
         }, status=500)
+
+
+@login_required
+def pam_dashboard_view(request):
+    """
+    PAM (Privileged Account Management) Dashboard
+    """
+    user = request.user
+    user_groups = user.groups.values_list('name', flat=True)
+    
+    # Check if user has admin permissions
+    is_admin = user.is_superuser or 'Vault Admin' in user_groups
+    
+    if not is_admin:
+        messages.error(request, 'You do not have permission to access the PAM Dashboard.')
+        return redirect('vault:dashboard')
+    
+    # Get admin account metrics
+    admin_vault_entries = VaultEntry.objects.filter(
+        is_admin_account=True,
+        is_deleted=False
+    ).select_related('credential_type', 'owner')
+    
+    # Admin Account Overview metrics
+    total_admin_accounts = admin_vault_entries.count()
+    active_admin_accounts = admin_vault_entries.filter(owner__is_active=True).count()
+    inactive_admin_accounts = total_admin_accounts - active_admin_accounts
+    
+    # Recent admin activity (last 30 days)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    recent_admin_activity = SystemAuditLog.objects.filter(
+        timestamp__gte=thirty_days_ago,
+        category='USER',
+        action__in=['USER_CREATE', 'USER_UPDATE', 'PASSWORD_RESET', 'USER_ACTIVATE', 'USER_DEACTIVATE']
+    ).count()
+    
+    # Risk metrics - accounts with old passwords (over 90 days)
+    ninety_days_ago = timezone.now() - timedelta(days=90)
+    high_risk_accounts = admin_vault_entries.filter(updated_at__lt=ninety_days_ago).count()
+    
+    # Credential Management metrics
+    vault_compliance = {
+        'total_entries': total_admin_accounts,
+        'with_vault_entry': admin_vault_entries.count(),
+        'compliance_rate': round((admin_vault_entries.count() / max(total_admin_accounts, 1)) * 100, 1)
+    }
+    
+    # Password age analysis
+    password_age_breakdown = {
+        'recent': admin_vault_entries.filter(updated_at__gte=timezone.now() - timedelta(days=30)).count(),
+        'moderate': admin_vault_entries.filter(
+            updated_at__gte=timezone.now() - timedelta(days=90),
+            updated_at__lt=timezone.now() - timedelta(days=30)
+        ).count(),
+        'old': admin_vault_entries.filter(updated_at__lt=ninety_days_ago).count()
+    }
+    
+    # Role & Permission Management metrics
+    if EntraUser.objects.exists():
+        total_entra_users = EntraUser.objects.filter(sync_status='ACTIVE').count()
+        users_with_roles = EntraRoleAssignment.objects.filter(
+            is_active=True
+        ).values('user').distinct().count()
+        
+        # PIM metrics
+        permanent_assignments = EntraRoleAssignment.objects.filter(
+            assignment_type='PERMANENT',
+            is_active=True
+        ).count()
+        eligible_assignments = EntraRoleAssignment.objects.filter(
+            assignment_type='ELIGIBLE',
+            is_active=True
+        ).count()
+        active_pim_assignments = EntraRoleAssignment.objects.filter(
+            assignment_type='ACTIVE',
+            is_active=True
+        ).count()
+        
+        # MFA metrics (placeholder - would need actual MFA data)
+        mfa_enabled_accounts = total_entra_users  # Assume all have MFA for now
+        mfa_compliance_rate = 100.0 if total_entra_users > 0 else 0.0
+    else:
+        total_entra_users = 0
+        users_with_roles = 0
+        permanent_assignments = 0
+        eligible_assignments = 0
+        active_pim_assignments = 0
+        mfa_enabled_accounts = 0
+        mfa_compliance_rate = 0.0
+    
+    context = {
+        'user': user,
+        'is_admin': is_admin,
+        'page_title': 'PAM Dashboard',
+        
+        # Admin Account Overview
+        'admin_overview': {
+            'total_accounts': total_admin_accounts,
+            'active_accounts': active_admin_accounts,
+            'inactive_accounts': inactive_admin_accounts,
+            'recent_activity': recent_admin_activity,
+            'high_risk_accounts': high_risk_accounts,
+            'risk_percentage': round((high_risk_accounts / max(total_admin_accounts, 1)) * 100, 1)
+        },
+        
+        # Credential Management
+        'credential_management': {
+            'vault_compliance': vault_compliance,
+            'password_age': password_age_breakdown,
+            'total_credentials': total_admin_accounts,
+            'managed_credentials': admin_vault_entries.count()
+        },
+        
+        # Role & Permission Management
+        'role_management': {
+            'total_users': total_entra_users,
+            'users_with_roles': users_with_roles,
+            'permanent_assignments': permanent_assignments,
+            'eligible_assignments': eligible_assignments,
+            'active_pim_assignments': active_pim_assignments,
+            'mfa_enabled': mfa_enabled_accounts,
+            'mfa_compliance_rate': mfa_compliance_rate
+        },
+        
+        # Recent admin entries for quick access
+        'recent_admin_entries': admin_vault_entries.order_by('-updated_at')[:5]
+    }
+    
+    return render(request, 'vault/pam_dashboard.html', context)
+
+
+@login_required
+def service_identities_view(request):
+    """Service Identities dashboard view"""
+    
+    # Get all service accounts
+    service_accounts = ServiceAccount.objects.select_related(
+        'manager', 'owner', 'vault_entry', 'created_by'
+    ).prefetch_related('service_principals')
+    
+    # Debug: Log the service accounts and their managers
+    logger.info(f"Service Identities View - Found {service_accounts.count()} service accounts:")
+    for sa in service_accounts[:3]:  # Log first 3 for debugging
+        manager_name = sa.manager.display_name if sa.manager else "No manager"
+        logger.info(f"  {sa.employee_id}: {sa.service_name} (Manager: {manager_name})")
+    
+    # Get all service principals
+    service_principals = ServicePrincipal.objects.select_related(
+        'owner', 'service_account', 'vault_entry', 'created_by'
+    ).prefetch_related('secrets')
+    
+    # Get all secrets
+    secrets = ServicePrincipalSecret.objects.select_related(
+        'service_principal', 'vault_entry', 'created_by'
+    )
+    
+    # Calculate metrics
+    total_service_accounts = service_accounts.count()
+    active_service_accounts = service_accounts.filter(status='ACTIVE').count()
+    
+    total_service_principals = service_principals.count()
+    active_service_principals = service_principals.filter(status='ACTIVE').count()
+    
+    total_secrets = secrets.count()
+    expiring_secrets = sum(1 for secret in secrets if secret.is_expiring_soon())
+    expired_secrets = sum(1 for secret in secrets if secret.is_expired())
+    
+    # Service accounts needing rotation
+    accounts_needing_rotation = sum(1 for account in service_accounts if account.needs_password_rotation())
+    
+    # Context for template
+    context = {
+        'service_accounts': service_accounts,
+        'service_principals': service_principals,
+        'secrets': secrets,
+        
+        # Metrics
+        'metrics': {
+            'total_service_accounts': total_service_accounts,
+            'active_service_accounts': active_service_accounts,
+            'total_service_principals': total_service_principals,
+            'active_service_principals': active_service_principals,
+            'total_secrets': total_secrets,
+            'expiring_secrets': expiring_secrets,
+            'expired_secrets': expired_secrets,
+            'accounts_needing_rotation': accounts_needing_rotation,
+        }
+    }
+    
+    return render(request, 'vault/service_identities.html', context)
+
+
+@login_required
+@require_http_methods(['GET'])
+def get_next_employee_id(request):
+    """Get the next available employee ID for Service Accounts"""
+    try:
+        next_id = ServiceAccount.generate_employee_id()
+        return JsonResponse({
+            'success': True,
+            'employee_id': next_id
+        })
+    except Exception as e:
+        logger.error(f"Error generating employee ID: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['GET'])
+def get_default_domain(request):
+    """Get the default domain for auto-completion in User Principal Name field"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Try to get domain from existing service accounts or users
+        domain = None
+        
+        # First, try to get domain from existing service accounts
+        service_accounts = ServiceAccount.objects.filter(
+            user_principal_name__isnull=False
+        ).exclude(user_principal_name='').first()
+        
+        if service_accounts and '@' in service_accounts.user_principal_name:
+            domain = service_accounts.user_principal_name.split('@')[1]
+        else:
+            # Try to get domain from Entra integration by searching for any user
+            entra_service = EntraIntegrationService()
+            if entra_service.is_configured():
+                # Search for users and extract domain from the first result
+                try:
+                    users_result = entra_service.user_manager.search_users('a')  # Generic search
+                    if users_result.get('success') and users_result.get('users'):
+                        first_user = users_result['users'][0]
+                        upn = first_user.get('userPrincipalName', '')
+                        if '@' in upn:
+                            domain = upn.split('@')[1]
+                except Exception:
+                    pass
+        
+        if domain:
+            return JsonResponse({
+                'success': True,
+                'domain': domain
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not determine default domain'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error getting default domain: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['POST'])
+def create_service_account(request):
+    """Create a new Service Account"""
+    try:
+        # Get form data
+        service_name = request.POST.get('service_name')
+        user_principal_name = request.POST.get('user_principal_name')
+        display_name = request.POST.get('display_name')
+        description = request.POST.get('description')
+        account_type = request.POST.get('account_type')
+        department = request.POST.get('department')
+        manager_id = request.POST.get('manager_id')
+        
+        # Log the form data for debugging
+        logger.info(f"Create Service Account - Form data received:")
+        logger.info(f"  service_name: {service_name}")
+        logger.info(f"  user_principal_name: {user_principal_name}")
+        logger.info(f"  display_name: {display_name}")
+        logger.info(f"  manager_id: {manager_id}")
+        
+        # Validate required fields
+        if not all([service_name, user_principal_name, display_name, description, account_type, manager_id]):
+            logger.error(f"Missing required fields: service_name={bool(service_name)}, user_principal_name={bool(user_principal_name)}, display_name={bool(display_name)}, description={bool(description)}, account_type={bool(account_type)}, manager_id={bool(manager_id)}")
+            return JsonResponse({
+                'success': False,
+                'error': 'All required fields must be filled'
+            })
+        
+        # Get manager from Entra ID and ensure local record exists
+        manager = None
+        
+        try:
+            from .entra_integration import EntraIntegrationService
+            entra_service = EntraIntegrationService()
+            
+            # Check if Entra is configured
+            if not entra_service.is_configured():
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Entra ID integration is not configured'
+                })
+            
+            logger.info(f"Looking up manager with ID: {manager_id}")
+            
+            # Get user details from Entra ID
+            user_info = entra_service.user_manager.get_user_by_id(manager_id)
+            
+            if not user_info:
+                logger.error(f"Manager with ID {manager_id} not found in Entra ID")
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Manager with ID {manager_id} not found in Entra ID'
+                })
+            
+            logger.info(f"Found manager in Entra: {user_info.get('displayName', 'Unknown')}")
+            
+            # Create or update local EntraUser record
+            manager, created = EntraUser.objects.get_or_create(
+                entra_user_id=manager_id,
+                defaults={
+                    'user_principal_name': user_info.get('userPrincipalName', ''),
+                    'display_name': user_info.get('displayName', ''),
+                    'email': user_info.get('mail', user_info.get('userPrincipalName', '')),
+                    'job_title': user_info.get('jobTitle', ''),
+                    'department': user_info.get('department', ''),
+                    'account_enabled': user_info.get('accountEnabled', True)
+                }
+            )
+            
+            # Update existing record if needed
+            if not created:
+                manager.display_name = user_info.get('displayName', manager.display_name)
+                manager.email = user_info.get('mail', manager.email)
+                manager.job_title = user_info.get('jobTitle', manager.job_title)
+                manager.department = user_info.get('department', manager.department)
+                manager.account_enabled = user_info.get('accountEnabled', manager.account_enabled)
+                manager.save()
+            
+            logger.info(f"Manager {'created' if created else 'updated'} locally: {manager.display_name}")
+                
+        except Exception as e:
+            logger.error(f"Error finding manager: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': f'Error finding manager: {str(e)}'
+            })
+        
+        # Generate employee ID
+        employee_id = ServiceAccount.generate_employee_id()
+        
+        # Generate secure password for the service account
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+        password = ''.join(secrets.choice(alphabet) for i in range(24))
+        
+        # Create Service Account in Entra ID first
+        entra_user_data = {
+            'displayName': display_name,
+            'userPrincipalName': user_principal_name,
+            'mail': user_principal_name,  # Set email to UPN as well
+            'mailNickname': user_principal_name.split('@')[0],
+            'accountEnabled': True,
+            'passwordProfile': {
+                'password': password,
+                'forceChangePasswordNextSignIn': False
+            },
+            'jobTitle': 'Service Account',
+            'department': department or 'Automation',
+            'employeeId': employee_id,
+            'usageLocation': 'US',  # Required for license assignment
+            'userType': 'Member'
+        }
+        
+        # Create user in Entra ID
+        entra_creation_result = entra_service.user_manager.create_user(entra_user_data)
+        
+        if not entra_creation_result.get('success'):
+            logger.error(f"Failed to create service account in Entra ID: {entra_creation_result.get('error')}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create service account in Entra ID: {entra_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        entra_user_id = entra_creation_result.get('user', {}).get('id')
+        
+        # Create local Service Account record
+        service_account = ServiceAccount.objects.create(
+            employee_id=employee_id,
+            service_name=service_name,
+            user_principal_name=user_principal_name,
+            display_name=display_name,
+            description=description,
+            account_type=account_type,
+            department=department,
+            manager=manager,
+            owner=request.user,
+            job_title='Service Account',
+            employee_type='Automation',
+            status='ACTIVE',  # Mark as active since it was created in Entra ID
+            entra_user_id=entra_user_id,  # Store the Entra ID
+            created_by=request.user
+        )
+        
+        # Create vault entry for the service account
+        credential_type, _ = CredentialType.objects.get_or_create(
+            name='Service Account',
+            defaults={'description': 'Service account credentials'}
+        )
+        
+        vault_entry = VaultEntry.objects.create(
+            name=f"Service Account - {service_name}",
+            username=user_principal_name,
+            password=password,  # In production, this should be encrypted
+            credential_type=credential_type,
+            owner=request.user,
+            notes=f"Auto-generated password for service account {employee_id}",
+            created_by=request.user,
+            updated_by=request.user
+        )
+        
+        # Link vault entry to service account and update status
+        service_account.vault_entry = vault_entry
+        service_account.password_last_set = timezone.now()
+        service_account.schedule_password_rotation()
+        service_account.status = 'ACTIVE'  # Update status from PENDING to ACTIVE
+        service_account.save()
+        
+        # Log the creation
+        AuditLogger.log_security_event(
+            category='USER',
+            action='SERVICE_ACCOUNT_CREATED',
+            user=request.user,
+            description=f"Service account '{service_name}' created with Employee ID {employee_id}",
+            request=request,
+            severity='MEDIUM',
+            success=True,
+            risk_score=20,
+            details={
+                'employee_id': employee_id,
+                'service_name': service_name,
+                'user_principal_name': user_principal_name,
+                'entra_user_id': entra_user_id,
+                'manager': manager.display_name,
+                'created_in_entra': True,
+                'department': department
+            }
+        )
+        
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            run_sentinel_async(
+                sentinel_service.send_service_identity_event(
+                    user=request.user,
+                    action='CREATE',
+                    identity_type='SERVICE_ACCOUNT',
+                    identity_id=employee_id,
+                    request=request,
+                    details={
+                        'service_name': service_name,
+                        'user_principal_name': user_principal_name,
+                        'manager': manager.display_name,
+                        'department': department
+                    }
+                )
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'service_account': {
+                'id': service_account.id,
+                'employee_id': service_account.employee_id,
+                'service_name': service_account.service_name
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating service account: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['GET'])
+def search_managers(request):
+    """Search for managers in Entra ID for Service Account creation"""
+    try:
+        search_term = request.GET.get('q', '').strip()
+        
+        if len(search_term) < 2:
+            return JsonResponse({
+                'success': True,
+                'users': []
+            })
+        
+        # Use Entra Integration Service to search for users
+        from .entra_integration import EntraIntegrationService
+        
+        entra_service = EntraIntegrationService()
+        
+        # Check if Entra is configured
+        if not entra_service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra ID integration is not configured. Please configure it first.'
+            })
+        
+        # Search users in Entra ID
+        search_result = entra_service.user_manager.search_users(search_term)
+        
+        if not search_result.get('success'):
+            logger.error(f"Entra user search failed: {search_result.get('error')}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Search failed: {search_result.get('error', 'Unknown error')}"
+            })
+        
+        users_data = []
+        entra_users = search_result.get('users', [])
+        
+        for user in entra_users:
+            users_data.append({
+                'id': user.get('id'),  # Use actual Entra ID
+                'type': 'entra',
+                'display_name': user.get('displayName', ''),
+                'user_principal_name': user.get('userPrincipalName', ''),
+                'email': user.get('mail', user.get('userPrincipalName', '')),
+                'job_title': user.get('jobTitle', ''),
+                'department': user.get('department', ''),
+                'source': 'Entra ID'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'users': users_data[:10]  # Limit to 10 results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error searching managers: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Search failed: {str(e)}"
+        })
+
+
+@login_required
+@require_http_methods(["GET"])
+def search_service_accounts(request):
+    """Search for Service Accounts to link to Service Principals"""
+    try:
+        search_term = request.GET.get('q', '').strip()
+        
+        if len(search_term) < 2:
+            return JsonResponse({
+                'success': True,
+                'accounts': []
+            })
+        
+        # Search Service Accounts
+        from .models import ServiceAccount
+        
+        accounts = ServiceAccount.objects.filter(
+            Q(service_name__icontains=search_term) |
+            Q(employee_id__icontains=search_term) |
+            Q(description__icontains=search_term)
+        )[:10]  # Limit to 10 results
+        
+        accounts_data = []
+        for account in accounts:
+            accounts_data.append({
+                'id': account.id,
+                'employee_id': account.employee_id,
+                'service_name': account.service_name,
+                'description': account.description or '',
+                'display_name': f"{account.service_name} ({account.employee_id})"
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'accounts': accounts_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error searching service accounts: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Search failed: {str(e)}"
+        })
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def create_service_principal(request):
+    """Create a new Service Principal with Entra ID integration"""
+    try:
+        # Parse JSON data
+        if hasattr(request, '_body'):
+            body = request._body
+        else:
+            body = request.body
+        
+        data = json.loads(body)
+        
+        # Validate required fields
+        required_fields = ['application_name', 'owner_id']
+        for field in required_fields:
+            if not data.get(field):
+                return JsonResponse({
+                    'success': False,
+                    'error': f'{field.replace("_", " ").title()} is required.'
+                })
+        
+        application_name = data.get('application_name').strip()
+        application_type = data.get('application_type', 'web')  # Default to 'web'
+        description = data.get('description', '').strip()
+        home_page_url = data.get('home_page_url', '').strip()
+        redirect_uris = data.get('redirect_uris', [])
+        service_account_id = data.get('service_account_id')
+        owner_id = data.get('owner_id')
+        secret_expiration_months = int(data.get('secret_expiration_months', 6))  # Default to 6 months
+        
+        # Validate application type if provided
+        valid_types = ['web', 'spa', 'mobile', 'daemon']
+        if application_type and application_type not in valid_types:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid application type. Must be one of: {", ".join(valid_types)}.'
+            })
+        
+        # Validate Service Account if provided
+        service_account = None
+        if service_account_id:
+            try:
+                from .models import ServiceAccount
+                service_account = ServiceAccount.objects.get(id=service_account_id)
+            except ServiceAccount.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Selected Service Account not found.'
+                })
+        
+        # Create Service Principal in Entra ID first
+        from .entra_integration import EntraIntegrationService
+        
+        entra_service = EntraIntegrationService()
+        
+        # Check if Entra is configured
+        if not entra_service.is_configured():
+            return JsonResponse({
+                'success': False,
+                'error': 'Entra ID integration is not configured. Please configure it first.'
+            })
+        
+        # Prepare app registration data
+        app_data = {
+            'displayName': application_name,
+            'signInAudience': 'AzureADMyOrg',  # Single tenant
+            'requiredResourceAccess': []
+        }
+        
+        # Add platform-specific configurations based on application type
+        if application_type == 'web':
+            if redirect_uris or home_page_url:
+                app_data['web'] = {}
+                if redirect_uris:
+                    app_data['web']['redirectUris'] = redirect_uris
+                if home_page_url:
+                    app_data['web']['homePageUrl'] = home_page_url
+        elif application_type == 'spa':
+            if redirect_uris:
+                app_data['spa'] = {
+                    'redirectUris': redirect_uris
+                }
+        elif application_type == 'mobile':
+            if redirect_uris:
+                app_data['publicClient'] = {
+                    'redirectUris': redirect_uris
+                }
+        # daemon type doesn't need redirect URIs
+        
+        # Create app registration in Entra ID
+        app_creation_result = entra_service.application_manager.create_application(app_data)
+        
+        if not app_creation_result.get('success'):
+            logger.error(f"Entra app creation failed: {app_creation_result.get('error')}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create application in Entra ID: {app_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        app_info = app_creation_result.get('application', {})
+        app_id = app_info.get('appId')  # Client ID
+        object_id = app_info.get('id')  # Object ID
+        
+        # Create Service Principal for the app
+        sp_creation_result = entra_service.application_manager.create_service_principal(app_id)
+        
+        if not sp_creation_result.get('success'):
+            logger.error(f"Service Principal creation failed: {sp_creation_result.get('error')}")
+            # Try to clean up the app registration
+            try:
+                entra_service.application_manager.delete_application(object_id)
+            except:
+                pass
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create Service Principal: {sp_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        sp_info = sp_creation_result.get('service_principal', {})
+        
+        # Add owner to the application
+        owner_result = entra_service.application_manager.add_application_owner(object_id, owner_id)
+        
+        if not owner_result.get('success'):
+            logger.warning(f"Failed to add owner to application: {owner_result.get('error')}")
+            # Continue anyway as the app is created, just log the warning
+        
+        # Generate client secret
+        secret_creation_result = entra_service.application_manager.create_application_secret(
+            object_id, 
+            f"{application_name} Secret",
+            secret_expiration_months
+        )
+        
+        if not secret_creation_result.get('success'):
+            logger.error(f"Secret creation failed: {secret_creation_result.get('error')}")
+            # Clean up created resources
+            try:
+                entra_service.application_manager.delete_application(object_id)
+            except:
+                pass
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create client secret: {secret_creation_result.get('error', 'Unknown error')}"
+            })
+        
+        secret_info = secret_creation_result.get('secret', {})
+        client_secret_value = secret_info.get('secretText')
+        secret_key_id = secret_info.get('keyId')
+        
+        # Create local ServicePrincipal record
+        from .models import ServicePrincipal, ServicePrincipalSecret
+        
+        try:
+            with transaction.atomic():
+                # Map application type to model choices
+                type_mapping = {
+                    'web': 'WEB',
+                    'spa': 'SPA',
+                    'mobile': 'NATIVE',
+                    'daemon': 'DAEMON'
+                }
+                
+                # Create Service Principal
+                service_principal = ServicePrincipal.objects.create(
+                application_name=application_name,
+                application_type=type_mapping.get(application_type, 'WEB'),
+                description=description,
+                home_page_url=home_page_url,
+                redirect_uris=redirect_uris,
+                service_account=service_account,
+                client_id=app_id,
+                entra_app_id=app_id,  # Application ID
+                entra_object_id=object_id,  # Service Principal Object ID
+                tenant_id=entra_service.tenant_id,
+                owner=request.user,
+                owner_entra_id=owner_id,
+                created_by=request.user
+                )
+                
+                # Create Service Principal Secret record
+                from dateutil import parser
+                expires_at_str = secret_info.get('endDateTime')
+                expires_at = parser.parse(expires_at_str) if expires_at_str else None
+                
+                secret = ServicePrincipalSecret.objects.create(
+                service_principal=service_principal,
+                secret_id=secret_key_id,
+                display_name=f"{application_name} Secret",
+                description=f"Client secret for {application_name}",
+                secret_value=client_secret_value,  # This should be encrypted in production
+                created_date=timezone.now(),
+                expires_at=expires_at
+                )
+                
+                # Vault the credentials
+                from .models import VaultEntry, CredentialType
+                
+                # Get or create Service Principal credential type
+                sp_credential_type, _ = CredentialType.objects.get_or_create(
+                name='Service Principal',
+                defaults={
+                    'description': 'Service Principal credentials for app registrations'
+                }
+                )
+                
+                # Create vault entry for Service Principal
+                vault_entry = VaultEntry.objects.create(
+                    name=f"SP - {application_name}",
+                    username=app_id,  # Client ID as username
+                    password=client_secret_value,  # Client Secret as password
+                    credential_type=sp_credential_type,
+                    owner=request.user,
+                    url=f"https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/Overview/appId/{app_id}",
+                    notes=f"Service Principal for {application_name}\n\nDescription: {description}\n\nClient ID: {app_id}\nObject ID: {object_id}\nTenant ID: {entra_service.tenant_id}\nApplication Type: {application_type}",
+                    created_by=request.user,
+                    updated_by=request.user
+                )
+                
+                # Link vault entry to Service Principal and update status
+                service_principal.vault_entry = vault_entry
+                service_principal.status = 'ACTIVE'  # Update status from PENDING to ACTIVE
+                service_principal.save()
+        
+        except Exception as e:
+            # Local creation failed, clean up Entra resources
+            logger.error(f"Failed to create Service Principal locally: {str(e)}")
+            
+            # Try to clean up the Entra resources
+            try:
+                logger.info(f"Attempting to clean up Entra resources for {application_name}")
+                entra_service.application_manager.delete_application(object_id)
+                logger.info(f"Successfully deleted orphaned application {object_id}")
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up Entra application {object_id}: {cleanup_error}")
+                # Return error with cleanup warning
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Failed to create Service Principal locally: {str(e)}. WARNING: Application was created in Entra ID but could not be removed. Please manually delete app with Object ID: {object_id}"
+                })
+            
+            # Return the original error
+            return JsonResponse({
+                'success': False,
+                'error': f"Failed to create Service Principal: {str(e)}"
+            })
+        
+        # Log the creation
+        AuditLogger.log_security_event(
+            category='SERVICE_IDENTITY',
+            action='SERVICE_PRINCIPAL_CREATE',
+            user=request.user,
+            description=f"Created Service Principal: {application_name} ({app_id})",
+            request=request,
+            severity='MEDIUM',
+            success=True,
+            details={
+                'application_name': application_name,
+                'application_type': application_type,
+                'client_id': app_id,
+                'service_account_id': service_account_id if service_account else None
+            }
+        )
+        
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            run_sentinel_async(
+                sentinel_service.send_service_identity_event(
+                    user=request.user,
+                    action='CREATE',
+                    identity_type='SERVICE_PRINCIPAL',
+                    identity_id=app_id,
+                    request=request,
+                    details={
+                        'application_name': application_name,
+                        'application_type': application_type,
+                        'client_id': app_id,
+                        'object_id': object_id,
+                        'tenant_id': entra_service.tenant_id
+                    }
+                )
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Service Principal "{application_name}" created successfully!',
+            'service_principal': {
+                'id': service_principal.id,
+                'application_name': application_name,
+                'client_id': app_id,
+                'application_type': application_type
+            }
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON data.'
+        })
+    except Exception as e:
+        logger.error(f"Error creating Service Principal: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Failed to create Service Principal: {str(e)}"
+        })
+
+
+# Sentinel Integration Views
+@login_required
+@require_http_methods(['GET', 'POST'])
+def sentinel_config(request):
+    """Manage Sentinel integration configuration"""
+    try:
+        if request.method == 'GET':
+            # Get current Sentinel configuration
+            from .models import SentinelIntegration
+            config = SentinelIntegration.objects.filter(enabled=True).first()
+            
+            return JsonResponse({
+                'success': True,
+                'config': {
+                    'enabled': config.enabled if config else False,
+                    'workspace_id': config.workspace_id if config else '',
+                    'data_collection_endpoint': config.data_collection_endpoint if config else '',
+                    'data_collection_rule_id': config.data_collection_rule_id if config else '',
+                    'stream_name': config.stream_name if config else 'Custom-MenshunPAM_CL',
+                    'connector_type': config.connector_type if config else 'LOG_ANALYTICS',
+                    'batch_size': config.batch_size if config else 10,
+                    'batch_timeout': config.batch_timeout if config else 30,
+                    'send_auth_events': config.send_auth_events if config else True,
+                    'send_vault_events': config.send_vault_events if config else True,
+                    'send_service_identity_events': config.send_service_identity_events if config else True,
+                    'send_privileged_access_events': config.send_privileged_access_events if config else True,
+                    'last_event_count': config.last_event_count if config else 0,
+                    'last_success': config.last_success.isoformat() if config and config.last_success else None,
+                    'last_error': config.last_error if config else None,
+                } if config else {
+                    'enabled': False,
+                    'workspace_id': '',
+                    'data_collection_endpoint': '',
+                    'data_collection_rule_id': '',
+                    'stream_name': 'Custom-MenshunPAM_CL',
+                    'connector_type': 'LOG_ANALYTICS',
+                    'batch_size': 10,
+                    'batch_timeout': 30,
+                    'send_auth_events': True,
+                    'send_vault_events': True,
+                    'send_service_identity_events': True,
+                    'send_privileged_access_events': True,
+                    'last_event_count': 0,
+                    'last_success': None,
+                    'last_error': None,
+                }
+            })
+            
+        elif request.method == 'POST':
+            # Update Sentinel configuration
+            data = json.loads(request.body)
+            
+            from .models import SentinelIntegration
+            
+            # Get or create configuration
+            config, created = SentinelIntegration.objects.get_or_create(
+                defaults={
+                    'enabled': data.get('enabled', False),
+                    'workspace_id': data.get('workspace_id', ''),
+                    'data_collection_endpoint': data.get('data_collection_endpoint', ''),
+                    'data_collection_rule_id': data.get('data_collection_rule_id', ''),
+                    'stream_name': data.get('stream_name', 'Custom-MenshunPAM_CL'),
+                    'connector_type': data.get('connector_type', 'LOG_ANALYTICS'),
+                    'batch_size': data.get('batch_size', 10),
+                    'batch_timeout': data.get('batch_timeout', 30),
+                    'send_auth_events': data.get('send_auth_events', True),
+                    'send_vault_events': data.get('send_vault_events', True),
+                    'send_service_identity_events': data.get('send_service_identity_events', True),
+                    'send_privileged_access_events': data.get('send_privileged_access_events', True),
+                    'created_by': request.user,
+                    'updated_by': request.user,
+                }
+            )
+            
+            if not created:
+                # Update existing configuration
+                config.enabled = data.get('enabled', config.enabled)
+                config.workspace_id = data.get('workspace_id', config.workspace_id)
+                config.data_collection_endpoint = data.get('data_collection_endpoint', config.data_collection_endpoint)
+                config.data_collection_rule_id = data.get('data_collection_rule_id', config.data_collection_rule_id)
+                config.stream_name = data.get('stream_name', config.stream_name)
+                config.connector_type = data.get('connector_type', config.connector_type)
+                config.batch_size = data.get('batch_size', config.batch_size)
+                config.batch_timeout = data.get('batch_timeout', config.batch_timeout)
+                config.send_auth_events = data.get('send_auth_events', config.send_auth_events)
+                config.send_vault_events = data.get('send_vault_events', config.send_vault_events)
+                config.send_service_identity_events = data.get('send_service_identity_events', config.send_service_identity_events)
+                config.send_privileged_access_events = data.get('send_privileged_access_events', config.send_privileged_access_events)
+                config.updated_by = request.user
+                config.save()
+            
+            # Log configuration change
+            AuditLogger.log_security_event(
+                category='INTEGRATION',
+                action='SENTINEL_CONFIG_UPDATE',
+                user=request.user,
+                description=f"Sentinel integration configuration {'enabled' if config.enabled else 'disabled'}",
+                request=request,
+                severity='HIGH',
+                success=True,
+                details={
+                    'enabled': config.enabled,
+                    'connector_type': config.connector_type,
+                    'created': created
+                }
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Sentinel configuration updated successfully',
+                'created': created
+            })
+            
+    except Exception as e:
+        logger.error(f"Error managing Sentinel configuration: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@require_http_methods(['POST'])
+def sentinel_test(request):
+    """Test Sentinel integration by sending a test event"""
+    try:
+        sentinel_service = get_sentinel_service()
+        
+        if not sentinel_service.is_enabled():
+            return JsonResponse({
+                'success': False,
+                'error': 'Sentinel integration is not enabled or configured'
+            })
+        
+        # Send a test event
+        run_sentinel_async(
+            sentinel_service.send_authentication_event(
+                user=request.user,
+                request=request,
+                success=True,
+                details={
+                    'test_event': True,
+                    'message': 'This is a test event from Menshun PAM'
+                }
+            )
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Test event sent successfully to Sentinel'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing Sentinel integration: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })

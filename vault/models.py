@@ -681,3 +681,417 @@ class IntegrationTask(models.Model):
     class Meta:
         db_table = 'vault_integrationtask'
         ordering = ['-created_at']
+
+
+# ===============================
+# Service Identity Models
+# ===============================
+
+class ServiceAccount(models.Model):
+    """
+    Service accounts for automation and system integrations
+    """
+    ACCOUNT_TYPES = [
+        ('AUTOMATION', 'Automation Account'),
+        ('INTEGRATION', 'Integration Account'),
+        ('MONITORING', 'Monitoring Account'),
+        ('BACKUP', 'Backup Account'),
+        ('API', 'API Service Account'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('DISABLED', 'Disabled'),
+        ('PENDING', 'Pending Creation'),
+        ('EXPIRED', 'Expired'),
+        ('SUSPENDED', 'Suspended'),
+    ]
+    
+    # Service Account Identification
+    employee_id = models.CharField(max_length=20, unique=True)  # SAxxxxx format
+    service_name = models.CharField(max_length=255)  # Friendly name
+    description = models.TextField()
+    account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPES, default='AUTOMATION')
+    
+    # Entra ID Integration
+    entra_user_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
+    user_principal_name = models.CharField(max_length=255, unique=True)
+    display_name = models.CharField(max_length=255)
+    
+    # Service Account Details
+    job_title = models.CharField(max_length=255, default='Service Account')
+    department = models.CharField(max_length=255, blank=True, null=True)
+    employee_type = models.CharField(max_length=50, default='Automation')
+    
+    # Management
+    manager = models.ForeignKey('EntraUser', on_delete=models.SET_NULL, null=True, related_name='managed_service_accounts')
+    owner = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='owned_service_accounts')
+    
+    # Status and Lifecycle
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    password_last_set = models.DateTimeField(blank=True, null=True)
+    password_expires_at = models.DateTimeField(blank=True, null=True)
+    next_rotation_date = models.DateTimeField(blank=True, null=True)
+    
+    # Vault Integration
+    vault_entry = models.OneToOneField('VaultEntry', on_delete=models.SET_NULL, null=True, blank=True, related_name='service_account')
+    
+    # Audit Fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='created_service_accounts')
+    
+    # Metadata
+    tags = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    
+    @classmethod
+    def generate_employee_id(cls):
+        """Generate next available SAxxxxx employee ID"""
+        import re
+        # Get the highest existing SA number
+        existing_ids = cls.objects.filter(
+            employee_id__regex=r'^SA\d{5}$'
+        ).values_list('employee_id', flat=True)
+        
+        max_num = 0
+        for emp_id in existing_ids:
+            match = re.match(r'^SA(\d{5})$', emp_id)
+            if match:
+                num = int(match.group(1))
+                max_num = max(max_num, num)
+        
+        next_num = max_num + 1
+        return f"SA{next_num:05d}"
+    
+    def schedule_password_rotation(self):
+        """Schedule password rotation 90 days from now"""
+        from datetime import timedelta
+        if self.password_last_set:
+            self.next_rotation_date = self.password_last_set + timedelta(days=90)
+            self.password_expires_at = self.password_last_set + timedelta(days=90)
+            self.save()
+    
+    def needs_password_rotation(self):
+        """Check if password rotation is needed"""
+        if not self.next_rotation_date:
+            return True
+        return timezone.now() >= self.next_rotation_date
+    
+    def __str__(self):
+        return f"{self.employee_id} - {self.service_name}"
+    
+    class Meta:
+        db_table = 'vault_serviceaccount'
+        ordering = ['employee_id']
+
+
+class ServicePrincipal(models.Model):
+    """
+    Enhanced Service Principal management with secret lifecycle
+    """
+    APPLICATION_TYPES = [
+        ('WEB', 'Web Application'),
+        ('SPA', 'Single Page Application'),
+        ('NATIVE', 'Native Application'),
+        ('API', 'API Application'),
+        ('DAEMON', 'Daemon/Service Application'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('DISABLED', 'Disabled'),
+        ('PENDING', 'Pending Creation'),
+        ('EXPIRED', 'Expired'),
+        ('SUSPENDED', 'Suspended'),
+    ]
+    
+    # Application Identity
+    application_name = models.CharField(max_length=255)
+    description = models.TextField()
+    application_type = models.CharField(max_length=20, choices=APPLICATION_TYPES)
+    
+    # Entra ID Integration
+    entra_app_id = models.CharField(max_length=255, unique=True)  # Application ID
+    entra_object_id = models.CharField(max_length=255, unique=True)  # Service Principal Object ID
+    client_id = models.CharField(max_length=255)  # Same as app_id, for clarity
+    tenant_id = models.CharField(max_length=255)
+    
+    # Application Details
+    home_page_url = models.URLField(blank=True, null=True)
+    redirect_uris = models.JSONField(default=list, blank=True)
+    
+    # Permissions
+    app_roles = models.JSONField(default=list, blank=True)
+    api_permissions = models.JSONField(default=list, blank=True)
+    delegated_permissions = models.JSONField(default=list, blank=True)
+    
+    # Management
+    owner = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='owned_identity_service_principals')
+    owner_entra_id = models.CharField(max_length=255, blank=True, null=True, help_text='Entra user ID of the owner')
+    service_account = models.ForeignKey('ServiceAccount', on_delete=models.SET_NULL, null=True, blank=True, related_name='service_principals')
+    
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    # Vault Integration
+    vault_entry = models.OneToOneField('VaultEntry', on_delete=models.SET_NULL, null=True, blank=True, related_name='service_principal')
+    
+    # Audit Fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='created_identity_service_principals')
+    
+    # Metadata
+    tags = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    
+    def __str__(self):
+        return f"{self.application_name} ({self.client_id})"
+    
+    class Meta:
+        db_table = 'vault_serviceprincipal'
+        ordering = ['application_name']
+
+
+class ServicePrincipalSecret(models.Model):
+    """
+    Manage Service Principal secrets with lifecycle tracking
+    """
+    SECRET_TYPES = [
+        ('CLIENT_SECRET', 'Client Secret'),
+        ('CERTIFICATE', 'Certificate'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('EXPIRED', 'Expired'),
+        ('REVOKED', 'Revoked'),
+        ('PENDING_ROTATION', 'Pending Rotation'),
+    ]
+    
+    service_principal = models.ForeignKey('ServicePrincipal', on_delete=models.CASCADE, related_name='secrets')
+    
+    # Secret Details
+    secret_type = models.CharField(max_length=20, choices=SECRET_TYPES, default='CLIENT_SECRET')
+    secret_id = models.CharField(max_length=255)  # Azure secret ID
+    display_name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    
+    # Secret Value (encrypted)
+    secret_value = models.TextField()  # Encrypted client secret value
+    
+    # Lifecycle
+    created_date = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
+    
+    # Rotation
+    rotation_scheduled = models.BooleanField(default=False)
+    rotation_date = models.DateTimeField(blank=True, null=True)
+    days_before_expiry_alert = models.IntegerField(default=30)
+    
+    # Vault Integration
+    vault_entry = models.OneToOneField('VaultEntry', on_delete=models.SET_NULL, null=True, blank=True, related_name='sp_secret')
+    
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True)
+    
+    def is_expiring_soon(self):
+        """Check if secret is expiring within alert threshold"""
+        if not self.expires_at:
+            return False
+        days_until_expiry = (self.expires_at - timezone.now()).days
+        return days_until_expiry <= self.days_before_expiry_alert
+    
+    def is_expired(self):
+        """Check if secret is expired"""
+        if not self.expires_at:
+            return False
+        return timezone.now() >= self.expires_at
+    
+    def days_until_expiry(self):
+        """Get days until expiry"""
+        if not self.expires_at:
+            return None
+        delta = self.expires_at - timezone.now()
+        return delta.days if delta.days > 0 else 0
+    
+    def schedule_rotation(self, days_before_expiry=30):
+        """Schedule secret rotation"""
+        from datetime import timedelta
+        if self.expires_at:
+            self.rotation_date = self.expires_at - timedelta(days=days_before_expiry)
+            self.rotation_scheduled = True
+            self.save()
+    
+    def __str__(self):
+        return f"{self.service_principal.application_name} - {self.display_name}"
+    
+    class Meta:
+        db_table = 'vault_serviceprincipalsecret'
+        ordering = ['-created_at']
+        unique_together = ['service_principal', 'secret_id']
+
+
+# ===============================
+# Microsoft Sentinel Integration Models
+# ===============================
+
+class SentinelIntegration(models.Model):
+    """
+    Microsoft Sentinel integration configuration and status
+    """
+    CONNECTOR_TYPES = [
+        ('LOG_ANALYTICS', 'Log Analytics Workspace'),
+        ('EVENT_HUB', 'Azure Event Hub'),
+        ('SYSLOG', 'Syslog Integration'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+        ('ERROR', 'Error'),
+        ('CONFIGURING', 'Configuring'),
+    ]
+    
+    # Configuration
+    workspace_id = models.CharField(max_length=255, help_text='Log Analytics Workspace ID')
+    data_collection_endpoint = models.URLField(help_text='Data Collection Endpoint URL')
+    data_collection_rule_id = models.CharField(max_length=255, help_text='Data Collection Rule ID')
+    stream_name = models.CharField(max_length=255, default='Custom-MenshunPAM_CL')
+    tenant_id = models.CharField(max_length=255, help_text='Azure Tenant ID')
+    
+    # Connection settings
+    connector_type = models.CharField(max_length=20, choices=CONNECTOR_TYPES, default='LOG_ANALYTICS')
+    batch_size = models.PositiveIntegerField(default=100, help_text='Events per batch')
+    batch_timeout = models.PositiveIntegerField(default=60, help_text='Batch timeout in seconds')
+    retry_attempts = models.PositiveIntegerField(default=3)
+    
+    # Status and monitoring
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='INACTIVE')
+    last_successful_send = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, null=True)
+    events_sent_today = models.PositiveIntegerField(default=0)
+    total_events_sent = models.PositiveIntegerField(default=0)
+    
+    # Feature flags
+    enabled = models.BooleanField(default=False)
+    send_auth_events = models.BooleanField(default=True)
+    send_vault_events = models.BooleanField(default=True)
+    send_service_identity_events = models.BooleanField(default=True)
+    send_privileged_access_events = models.BooleanField(default=True)
+    
+    # Audit fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='created_sentinel_configs')
+    updated_by = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, related_name='updated_sentinel_configs')
+    
+    def __str__(self):
+        return f"Sentinel Integration ({self.workspace_id})"
+    
+    def is_configured(self):
+        """Check if Sentinel integration is properly configured"""
+        required_fields = [self.workspace_id, self.data_collection_endpoint, 
+                         self.data_collection_rule_id, self.tenant_id]
+        return all(required_fields) and self.enabled
+    
+    def update_stats(self, events_count=1, success=True, error_message=None):
+        """Update integration statistics"""
+        if success:
+            self.last_successful_send = timezone.now()
+            self.events_sent_today += events_count
+            self.total_events_sent += events_count
+            self.status = 'ACTIVE'
+            self.last_error = None
+        else:
+            self.status = 'ERROR'
+            self.last_error = error_message
+        self.save()
+    
+    class Meta:
+        db_table = 'vault_sentinelintegration'
+        verbose_name = 'Sentinel Integration'
+        verbose_name_plural = 'Sentinel Integrations'
+
+
+class SentinelEvent(models.Model):
+    """
+    Track Sentinel events for monitoring and debugging
+    """
+    EVENT_TYPES = [
+        ('AUTHENTICATION', 'Authentication'),
+        ('VAULT_ACCESS', 'Vault Access'),
+        ('SERVICE_IDENTITY', 'Service Identity'),
+        ('PRIVILEGED_ACCESS', 'Privileged Access'),
+        ('SYSTEM', 'System'),
+        ('SECURITY', 'Security'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SENT', 'Sent'),
+        ('FAILED', 'Failed'),
+        ('RETRY', 'Retry'),
+    ]
+    
+    # Event details
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
+    event_subtype = models.CharField(max_length=50, blank=True)
+    user = models.ForeignKey('CustomUser', on_delete=models.SET_NULL, null=True, blank=True)
+    source_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    
+    # Event data
+    event_data = models.JSONField(help_text='Complete event data in JSON format')
+    severity = models.CharField(max_length=20, choices=[
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    ], default='MEDIUM')
+    
+    # Processing status
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    retry_count = models.PositiveIntegerField(default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, null=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.event_type} - {self.created_at}"
+    
+    def mark_sent(self):
+        """Mark event as successfully sent"""
+        self.status = 'SENT'
+        self.sent_at = timezone.now()
+        self.processed_at = timezone.now()
+        self.save()
+    
+    def mark_failed(self, error_message):
+        """Mark event as failed"""
+        self.status = 'FAILED'
+        self.error_message = error_message
+        self.processed_at = timezone.now()
+        self.retry_count += 1
+        self.save()
+    
+    def can_retry(self, max_retries=3):
+        """Check if event can be retried"""
+        return self.retry_count < max_retries and self.status in ['FAILED', 'RETRY']
+    
+    class Meta:
+        db_table = 'vault_sentinelevent'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['event_type', 'created_at']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['user', 'event_type']),
+        ]
+

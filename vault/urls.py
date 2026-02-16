@@ -7,7 +7,7 @@ from .authentication import (
     microsoft_login, microsoft_callback
 )
 from .views import (
-    VaultEntryViewSet, CredentialTypeViewSet, dashboard_view,
+    VaultEntryViewSet, CredentialTypeViewSet, dashboard_view, pam_dashboard_view,
     vault_entries_view, credential_types_view, user_management_view,
     audit_logs_view, api_docs_view, create_vault_entry, update_vault_entry,
     get_vault_entry, delete_vault_entry, get_users, create_user, update_user, delete_user,
@@ -18,7 +18,12 @@ from .views import (
     # Role management endpoints
     entra_user_roles, entra_available_roles, entra_assign_role, entra_remove_role, entra_role_members,
     # Cloud admin management
-    cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account
+    cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account,
+    # Service Identity management
+    service_identities_view, get_next_employee_id, get_default_domain, create_service_account, search_managers,
+    search_service_accounts, create_service_principal,
+    # Sentinel Integration
+    sentinel_config, sentinel_test
 )
 
 # Create a router for DRF ViewSets
@@ -44,8 +49,10 @@ urlpatterns = [
     # Main application views
     path('', dashboard_view, name='home'),  # Default home view
     path('dashboard/', dashboard_view, name='dashboard'),
+    path('pam-dashboard/', pam_dashboard_view, name='pam_dashboard'),
     path('vault/', vault_entries_view, name='vault_entries'),
     path('credentials/', credential_types_view, name='credential_types'),
+    path('service-identities/', service_identities_view, name='service_identities'),
     
     # Admin views
     path('users/', user_management_view, name='user_management'),
@@ -95,4 +102,16 @@ urlpatterns = [
     path('ajax/admin-reset-password/<str:username>/', reset_admin_password, name='ajax_reset_admin_password'),
     path('ajax/admin-toggle-account/<str:username>/', toggle_admin_account, name='ajax_toggle_admin_account'),
     path('ajax/admin-update-account/<str:username>/', update_admin_account, name='ajax_update_admin_account'),
+    
+    # Service Identity AJAX endpoints
+    path('ajax/get-next-employee-id/', get_next_employee_id, name='ajax_get_next_employee_id'),
+    path('ajax/get-default-domain/', get_default_domain, name='ajax_get_default_domain'),
+    path('ajax/create-service-account/', create_service_account, name='ajax_create_service_account'),
+    path('ajax/search-managers/', search_managers, name='ajax_search_managers'),
+    path('ajax/search-service-accounts/', search_service_accounts, name='ajax_search_service_accounts'),
+    path('ajax/create-service-principal/', create_service_principal, name='ajax_create_service_principal'),
+    
+    # Sentinel Integration AJAX endpoints
+    path('ajax/sentinel-config/', sentinel_config, name='ajax_sentinel_config'),
+    path('ajax/sentinel-test/', sentinel_test, name='ajax_sentinel_test'),
 ]

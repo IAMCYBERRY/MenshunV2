@@ -2,9 +2,11 @@
 Audit logging utilities for Menshun PAM system
 """
 import logging
+import asyncio
 from typing import Optional, Dict, Any
 from django.http import HttpRequest
 from .models import SystemAuditLog
+from .sentinel_integration import get_sentinel_service
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,21 @@ def get_session_id(request: HttpRequest) -> Optional[str]:
     return request.session.session_key if hasattr(request, 'session') else None
 
 
+def run_sentinel_async(coro):
+    """Helper to run async Sentinel logging in sync context"""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we're already in an event loop, create a task
+            asyncio.create_task(coro)
+        else:
+            # If no event loop is running, run the coroutine
+            loop.run_until_complete(coro)
+    except Exception as e:
+        logger.warning(f"Failed to send event to Sentinel: {e}")
+        # Don't let Sentinel failures break the main audit logging
+
+
 class AuditLogger:
     """
     Centralized audit logging utility
@@ -35,7 +52,7 @@ class AuditLogger:
     @staticmethod
     def log_auth_success(user, request: HttpRequest = None, details: Dict[str, Any] = None):
         """Log successful authentication"""
-        return SystemAuditLog.log(
+        audit_log = SystemAuditLog.log(
             category='AUTH',
             action='LOGIN_SUCCESS',
             user=user,
@@ -47,6 +64,20 @@ class AuditLogger:
             user_agent=get_user_agent(request) if request else None,
             session_id=get_session_id(request) if request else None,
         )
+        
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            run_sentinel_async(
+                sentinel_service.send_authentication_event(
+                    user=user,
+                    request=request,
+                    success=True,
+                    details=details
+                )
+            )
+        
+        return audit_log
     
     @staticmethod
     def log_auth_failure(username: str, request: HttpRequest = None, reason: str = None, details: Dict[str, Any] = None):
@@ -66,6 +97,24 @@ class AuditLogger:
             session_id=get_session_id(request) if request else None,
             risk_score=risk_score,
         )
+        
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            # Create a temporary user object for Sentinel
+            class TempUser:
+                email = username
+                username = username
+            
+            run_sentinel_async(
+                sentinel_service.send_authentication_event(
+                    user=TempUser(),
+                    request=request,
+                    success=False,
+                    details={**(details or {}), 'reason': reason}
+                )
+            )
+        
         return log
     
     @staticmethod
@@ -164,7 +213,7 @@ class AuditLogger:
     @staticmethod
     def log_vault_create(user, vault_entry, request: HttpRequest = None):
         """Log vault entry creation"""
-        return SystemAuditLog.log(
+        audit_log = SystemAuditLog.log(
             category='VAULT',
             action='VAULT_CREATE',
             user=user,
@@ -179,6 +228,21 @@ class AuditLogger:
             user_agent=get_user_agent(request) if request else None,
             session_id=get_session_id(request) if request else None,
         )
+        
+        # Send to Sentinel
+        sentinel_service = get_sentinel_service()
+        if sentinel_service.is_enabled():
+            run_sentinel_async(
+                sentinel_service.send_vault_access_event(
+                    user=user,
+                    action='CREATE',
+                    vault_entry=vault_entry,
+                    request=request,
+                    details={'credential_type': vault_entry.credential_type.name}
+                )
+            )
+        
+        return audit_log
     
     @staticmethod
     def log_vault_view(user, vault_entry, request: HttpRequest = None):
