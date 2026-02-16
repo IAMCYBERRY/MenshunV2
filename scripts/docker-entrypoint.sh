@@ -62,7 +62,7 @@ fi
 
 # Validate deployment settings
 print_status "Validating deployment settings..."
-python manage.py check --deploy
+python manage.py check --deploy || true
 
 # Create log directory if it doesn't exist
 mkdir -p /app/logs

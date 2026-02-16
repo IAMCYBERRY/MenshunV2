@@ -1,7 +1,7 @@
 # Menshun PAM - VM Deployment Makefile
 # Simple commands for production deployment and management
 
-.PHONY: help init deploy start stop restart status logs backup restore update clean dev-start dev-stop
+.PHONY: help init deploy start stop restart status logs backup restore update clean quick-deploy deploy-stop deploy-logs deploy-status dev-start dev-stop
 
 # Default target
 help: ## Show this help message
@@ -31,6 +31,7 @@ help: ## Show this help message
 
 # Variables
 COMPOSE_PROD = docker-compose -f docker-compose.prod.yml
+COMPOSE_DEPLOY = docker compose -f docker-compose.deploy.yml
 COMPOSE_DEV = docker-compose -f docker-compose.yml
 BACKUP_DIR = $${HOME}/opt/menshun/backups
 LOG_DIR = $${HOME}/opt/menshun/logs
@@ -180,6 +181,20 @@ clean: ## Clean up unused resources
 	@docker system prune -f
 	@docker volume prune -f
 	$(call print_status,"✅ Cleanup completed!")
+
+# Quick deploy commands (one-touch deployment)
+quick-deploy: ## One-touch deploy (git clone && ./deploy.sh)
+	@./deploy.sh
+
+deploy-stop: ## Stop quick-deploy services
+	$(call print_status,"Stopping deploy services...")
+	@$(COMPOSE_DEPLOY) down
+
+deploy-logs: ## Show quick-deploy logs
+	@$(COMPOSE_DEPLOY) logs --tail=50 -f
+
+deploy-status: ## Show quick-deploy container status
+	@$(COMPOSE_DEPLOY) ps
 
 # Development commands
 dev-start: ## Start in development mode
