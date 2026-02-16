@@ -20,7 +20,7 @@ from .views import (
     # Cloud admin management
     cloud_admins, create_test_admin_logs, admin_details, reset_admin_password, toggle_admin_account, update_admin_account,
     # Service Identity management
-    service_identities_view, get_next_employee_id, create_service_account, search_managers,
+    service_identities_view, get_next_employee_id, get_default_domain, create_service_account, search_managers,
     search_service_accounts, create_service_principal,
     # Sentinel Integration
     sentinel_config, sentinel_test
@@ -105,6 +105,7 @@ urlpatterns = [
     
     # Service Identity AJAX endpoints
     path('ajax/get-next-employee-id/', get_next_employee_id, name='ajax_get_next_employee_id'),
+    path('ajax/get-default-domain/', get_default_domain, name='ajax_get_default_domain'),
     path('ajax/create-service-account/', create_service_account, name='ajax_create_service_account'),
     path('ajax/search-managers/', search_managers, name='ajax_search_managers'),
     path('ajax/search-service-accounts/', search_service_accounts, name='ajax_search_service_accounts'),

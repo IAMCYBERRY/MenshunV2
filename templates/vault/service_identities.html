@@ -286,19 +286,32 @@ document.getElementById('servicePrincipalSearch').addEventListener('keyup', func
     }
 });
 
+// Global variable to store the default domain
+let defaultDomain = null;
+
 // Modal functions
 function openCreateServiceAccountModal() {
     const modal = document.getElementById('createServiceAccountModal');
     modal.style.display = 'flex';
     
-    // Fetch next employee ID
-    fetch("{% url 'vault:ajax_get_next_employee_id' %}")
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('employeeIdPreview').textContent = data.employee_id;
-            }
-        });
+    // Fetch next employee ID and default domain
+    Promise.all([
+        fetch("{% url 'vault:ajax_get_next_employee_id' %}").then(response => response.json()),
+        fetch("{% url 'vault:ajax_get_default_domain' %}").then(response => response.json())
+    ])
+    .then(([employeeData, domainData]) => {
+        if (employeeData.success) {
+            document.getElementById('employeeIdPreview').textContent = employeeData.employee_id;
+        }
+        if (domainData.success) {
+            defaultDomain = domainData.domain;
+            document.getElementById('domainHint').textContent = `Type the username prefix (e.g., "service.account") - @${defaultDomain} will be auto-added`;
+            document.getElementById('userPrincipalNameInput').placeholder = `service.account (will become service.account@${defaultDomain})`;
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching modal data:', error);
+    });
 }
 
 function closeCreateServiceAccountModal() {
@@ -382,6 +395,36 @@ function selectManager(user) {
     document.getElementById('selectedManagerName').textContent = user.display_name;
     document.getElementById('selectedManagerEmail').textContent = user.email || user.user_principal_name;
     document.getElementById('managerSearchResults').innerHTML = '';
+}
+
+// UPN auto-completion functions
+function handleUPNInput(input) {
+    if (!defaultDomain) return;
+    
+    let value = input.value;
+    
+    // Remove existing domain if present
+    if (value.includes('@')) {
+        value = value.split('@')[0];
+    }
+    
+    // Show preview in placeholder
+    if (value.length > 0) {
+        input.placeholder = `${value}@${defaultDomain}`;
+    } else {
+        input.placeholder = `service.account (will become service.account@${defaultDomain})`;
+    }
+}
+
+function finalizeUPNInput(input) {
+    if (!defaultDomain) return;
+    
+    let value = input.value.trim();
+    
+    // Only add domain if there's a value and no @ symbol
+    if (value.length > 0 && !value.includes('@')) {
+        input.value = `${value}@${defaultDomain}`;
+    }
 }
 
 // Create Service Account
@@ -699,8 +742,15 @@ function createServicePrincipal() {
                 <!-- User Principal Name -->
                 <div class="form-group">
                     <label class="form-label">User Principal Name <span style="color: var(--crimson-red);">*</span></label>
-                    <input type="email" name="user_principal_name" class="form-input" required 
-                           placeholder="service.account@company.com">
+                    <div style="position: relative;">
+                        <input type="email" id="userPrincipalNameInput" name="user_principal_name" class="form-input" required 
+                               placeholder="service.account" 
+                               onkeyup="handleUPNInput(this)" 
+                               onblur="finalizeUPNInput(this)">
+                        <div style="font-size: 12px; color: var(--soft-grey); margin-top: 4px;">
+                            <span id="domainHint">Type the username prefix (e.g., "service.account") - domain will be auto-added</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Display Name -->

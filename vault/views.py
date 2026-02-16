@@ -2899,6 +2899,57 @@ def get_next_employee_id(request):
 
 
 @login_required
+@require_http_methods(['GET'])
+def get_default_domain(request):
+    """Get the default domain for auto-completion in User Principal Name field"""
+    try:
+        from .entra_integration import EntraIntegrationService
+        
+        # Try to get domain from existing service accounts or users
+        domain = None
+        
+        # First, try to get domain from existing service accounts
+        service_accounts = ServiceAccount.objects.filter(
+            user_principal_name__isnull=False
+        ).exclude(user_principal_name='').first()
+        
+        if service_accounts and '@' in service_accounts.user_principal_name:
+            domain = service_accounts.user_principal_name.split('@')[1]
+        else:
+            # Try to get domain from Entra integration by searching for any user
+            entra_service = EntraIntegrationService()
+            if entra_service.is_configured():
+                # Search for users and extract domain from the first result
+                try:
+                    users_result = entra_service.user_manager.search_users('a')  # Generic search
+                    if users_result.get('success') and users_result.get('users'):
+                        first_user = users_result['users'][0]
+                        upn = first_user.get('userPrincipalName', '')
+                        if '@' in upn:
+                            domain = upn.split('@')[1]
+                except Exception:
+                    pass
+        
+        if domain:
+            return JsonResponse({
+                'success': True,
+                'domain': domain
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not determine default domain'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error getting default domain: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
 @require_http_methods(['POST'])
 def create_service_account(request):
     """Create a new Service Account"""
@@ -3068,9 +3119,15 @@ def create_service_account(request):
         service_account.save()
         
         # Log the creation
-        AuditLogger.log_action(
-            user=request.user,
+        AuditLogger.log_security_event(
+            category='USER',
             action='SERVICE_ACCOUNT_CREATED',
+            user=request.user,
+            description=f"Service account '{service_name}' created with Employee ID {employee_id}",
+            request=request,
+            severity='MEDIUM',
+            success=True,
+            risk_score=20,
             details={
                 'employee_id': employee_id,
                 'service_name': service_name,
