@@ -152,7 +152,7 @@ rm /tmp/menshun-override.conf
 # Enable Nginx service
 print_status "Enabling Nginx service..."
 sudo systemctl daemon-reload
-sudo systemctl enable nginx
+sudo systemctl enable nginx || true
 
 # Create Nginx log rotation override
 print_status "Configuring Nginx log rotation..."
