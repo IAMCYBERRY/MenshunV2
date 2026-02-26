@@ -103,9 +103,9 @@ deploy: ## Deploy/update Menshun in production mode
 	@echo "$(BLUE)Starting database migrations...$(NC)"
 	@$(COMPOSE_PROD) up -d db redis
 	@sleep 10
-	@$(COMPOSE_PROD) exec -T web python manage.py migrate
+	@$(COMPOSE_PROD) run --rm web python manage.py migrate
 	@echo "$(BLUE)Collecting static files...$(NC)"
-	@$(COMPOSE_PROD) exec -T web python manage.py collectstatic --noinput
+	@$(COMPOSE_PROD) run --rm web python manage.py collectstatic --noinput
 	@echo "$(BLUE)Starting all services...$(NC)"
 	@$(COMPOSE_PROD) up -d
 	@sleep 5
