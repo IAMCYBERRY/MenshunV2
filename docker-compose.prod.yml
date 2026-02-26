@@ -128,6 +128,7 @@ services:
       - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-31536000}
       - SESSION_COOKIE_SECURE=true
       - CSRF_COOKIE_SECURE=true
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
       
       # Email Configuration (Optional)
       - EMAIL_HOST=${EMAIL_HOST}
@@ -209,10 +210,11 @@ services:
       - AZURE_TENANT_ID=${AZURE_TENANT_ID}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
-      
+
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
+
     depends_on:
       db:
         condition: service_healthy
@@ -271,7 +273,8 @@ services:
       
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
+
     depends_on:
       db:
         condition: service_healthy

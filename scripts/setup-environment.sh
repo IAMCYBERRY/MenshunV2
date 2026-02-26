@@ -91,6 +91,13 @@ if [ -f .env ]; then
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_status "Keeping existing .env file"
+        # If .env exists but is missing FIELD_ENCRYPTION_KEY, add it without recreating
+        if ! grep -q "^FIELD_ENCRYPTION_KEY=" .env; then
+            print_status "Adding missing FIELD_ENCRYPTION_KEY to existing .env..."
+            FIELD_ENCRYPTION_KEY=$(generate_fernet_key)
+            printf "\n# Field-Level Encryption Key (auto-added)\nFIELD_ENCRYPTION_KEY=%s\n" "$FIELD_ENCRYPTION_KEY" >> .env
+            print_warning "IMPORTANT: Back up the new FIELD_ENCRYPTION_KEY from .env — losing it makes vault passwords unrecoverable!"
+        fi
         exit 0
     fi
 fi

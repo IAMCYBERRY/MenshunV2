@@ -75,6 +75,7 @@ services:
 
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
 
     depends_on:
       db:
@@ -118,6 +119,7 @@ services:
 
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
 
     depends_on:
       db:
@@ -155,6 +157,7 @@ services:
 
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
 
     depends_on:
       db:
