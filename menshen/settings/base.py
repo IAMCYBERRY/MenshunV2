@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'django_filters',
+    'django_ratelimit',
     # Local apps
     'vault',
 ]
@@ -160,7 +161,7 @@ REST_FRAMEWORK = {
 # SimpleJWT settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=24),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
@@ -205,6 +206,10 @@ ENTRA_GROUP_MAPPINGS = {
     config('MENSHEN_VAULT_EDITOR_GROUP', default='Menshen_Vault_Editor'): 'Vault Editor',
     config('MENSHEN_VAULT_VIEWER_GROUP', default='Menshen_Vault_Viewer'): 'Vault Viewer',
 }
+
+# Field-level encryption key for VaultEntry.password (Fernet 32-byte key)
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default='')
 
 # Security Settings
 SECURE_BROWSER_XSS_FILTER = True

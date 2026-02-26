@@ -24,9 +24,17 @@ print_section() {
     echo -e "${BLUE}=== $1 ===${NC}"
 }
 
-# Generate secure random string
+# Generate secure random string (for SECRET_KEY, DB_PASSWORD, etc.)
 generate_secret() {
     openssl rand -base64 32 | tr -d "=+/" | cut -c1-50
+}
+
+# Generate a Fernet-compatible key (32 random bytes in URL-safe base64).
+# Python's cryptography library is preferred; falls back to openssl on hosts
+# where the package is not installed at the system level.
+generate_fernet_key() {
+    python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null \
+        || openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n'
 }
 
 # Get server IP
@@ -110,6 +118,10 @@ fi
 # Secret key generation
 print_status "Generating secure Django secret key..."
 SECRET_KEY=$(generate_secret)
+
+# Field encryption key generation
+print_status "Generating Fernet field encryption key..."
+FIELD_ENCRYPTION_KEY=$(generate_fernet_key)
 
 # Database configuration
 echo ""
@@ -228,6 +240,12 @@ cat > .env << EOF
 DEBUG=False
 SECRET_KEY=$SECRET_KEY
 ALLOWED_HOSTS=$DOMAIN_NAME,localhost,127.0.0.1
+
+# =================================
+# Field-Level Encryption Key
+# =================================
+# WARNING: Back this up securely. Losing it makes all vault passwords unrecoverable.
+FIELD_ENCRYPTION_KEY=$FIELD_ENCRYPTION_KEY
 
 # =================================
 # Database Configuration
@@ -436,4 +454,5 @@ echo "Sentinel: $([ "$SENTINEL_ENABLED" = "true" ] && echo "Enabled" || echo "Di
 echo "Email: $([ -n "$EMAIL_HOST" ] && echo "Configured" || echo "Not configured")"
 echo ""
 print_warning "Important: Keep your .env file secure and never commit it to version control!"
+print_warning "Backup FIELD_ENCRYPTION_KEY from .env now — losing it makes all vault passwords unrecoverable!"
 print_status "Next step: Run 'make deploy' to deploy the application"

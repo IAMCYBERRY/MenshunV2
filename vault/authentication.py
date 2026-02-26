@@ -2,6 +2,8 @@ import requests
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import Group
 from django.conf import settings
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -17,9 +19,13 @@ from .audit import AuditLogger
 logger = logging.getLogger(__name__)
 
 
+@method_decorator(
+    ratelimit(key='ip', rate='5/m', method='POST', block=True),
+    name='dispatch',
+)
 class CustomTokenObtainPairView(TokenObtainPairView):
-    """Custom JWT token view with additional user info"""
-    
+    """Custom JWT token view with additional user info (5 POST attempts/min per IP)."""
+
     def post(self, request, *args, **kwargs):
         username = request.data.get('username')
         response = super().post(request, *args, **kwargs)
@@ -218,10 +224,11 @@ def microsoft_login(request):
     })
 
 
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def microsoft_callback(request):
-    """Handle Microsoft authentication callback"""
+    """Handle Microsoft authentication callback (5 POST attempts/min per IP)."""
     auth_code = request.data.get('code')
     
     if not auth_code:

@@ -20,6 +20,13 @@ print_warning() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
+# Validate required secrets are present
+if [ -z "$FIELD_ENCRYPTION_KEY" ]; then
+    print_error "FIELD_ENCRYPTION_KEY is not set. Cannot start — vault passwords would be unreadable."
+    exit 1
+fi
+print_status "FIELD_ENCRYPTION_KEY is set."
+
 # Wait for database to be ready
 print_status "Waiting for database to be ready..."
 while ! pg_isready -h $DATABASE_HOST -p $DATABASE_PORT -U $DATABASE_USER; do

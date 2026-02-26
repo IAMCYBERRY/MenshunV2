@@ -3,6 +3,8 @@ from django.db import models
 from django.utils import timezone
 import json
 
+from .fields import EncryptedCharField
+
 
 class CustomUser(AbstractUser):
     """
@@ -70,7 +72,7 @@ class VaultEntry(models.Model):
     """
     name = models.CharField(max_length=255)
     username = models.CharField(max_length=255)
-    password = models.CharField(max_length=512)  # Will be encrypted in production
+    password = EncryptedCharField()  # Encrypted at rest with FIELD_ENCRYPTION_KEY
     credential_type = models.ForeignKey(
         CredentialType, 
         on_delete=models.PROTECT,

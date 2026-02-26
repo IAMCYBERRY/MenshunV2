@@ -39,18 +39,28 @@ if [ ! -f .env ]; then
             || openssl rand -base64 50 | tr -d '\n/+=' | head -c 50
     }
 
+    # Fernet key = 32 random bytes in URL-safe base64 (required by field encryption)
+    generate_fernet_key() {
+        python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null \
+            || openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n'
+    }
+
     SECRET_KEY=$(generate_secret)
     DB_PASSWORD=$(generate_secret)
+    ENCRYPTION_KEY=$(generate_fernet_key)
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
         sed -i '' "s|__GENERATED_SECRET_KEY__|${SECRET_KEY}|" .env
         sed -i '' "s|__GENERATED_DB_PASSWORD__|${DB_PASSWORD}|" .env
+        sed -i '' "s|__GENERATED_ENCRYPTION_KEY__|${ENCRYPTION_KEY}|" .env
     else
         sed -i "s|__GENERATED_SECRET_KEY__|${SECRET_KEY}|" .env
         sed -i "s|__GENERATED_DB_PASSWORD__|${DB_PASSWORD}|" .env
+        sed -i "s|__GENERATED_ENCRYPTION_KEY__|${ENCRYPTION_KEY}|" .env
     fi
 
     info ".env created with random secrets."
+    warn "IMPORTANT: Back up FIELD_ENCRYPTION_KEY from .env — losing it makes vault passwords unrecoverable."
 else
     info "Using existing .env file."
 fi
