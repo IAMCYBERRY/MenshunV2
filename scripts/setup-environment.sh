@@ -73,7 +73,8 @@ mkdir -p ${HOME}/opt/menshun/scripts
 
 # Set proper ownership
 print_status "Setting directory permissions..."
-chmod -R 755 ${HOME}/opt/menshun
+sudo chmod -R 755 ${HOME}/opt/menshun
+sudo chown -R $(whoami):$(whoami) ${HOME}/opt/menshun
 
 # Check if .env already exists
 if [ -f .env ]; then
