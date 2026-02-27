@@ -58,9 +58,6 @@ User=$REAL_USER
 Group=docker
 WorkingDirectory=$APP_DIR
 
-# Environment
-Environment=COMPOSE_FILE=docker-compose.prod.yml
-Environment=COMPOSE_PROJECT_NAME=menshun
 
 # Start command
 ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
