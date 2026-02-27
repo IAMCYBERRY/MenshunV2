@@ -99,6 +99,8 @@ deploy: ## Deploy/update Menshun in production mode
 		$(call print_error,Then run make deploy again.); \
 		exit 1; \
 	fi
+	@echo "$(BLUE)Stopping any existing containers...$(NC)"
+	@$(COMPOSE_PROD) down --remove-orphans 2>/dev/null || true
 	@echo "$(BLUE)Building production images...$(NC)"
 	@$(COMPOSE_PROD) build --no-cache
 	@echo "$(BLUE)Starting database migrations...$(NC)"
