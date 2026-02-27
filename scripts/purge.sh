@@ -52,6 +52,8 @@ print_section "Step 3/8: Removing Docker networks"
 docker network rm menshunv2_menshun_network 2>/dev/null \
     && print_status "Docker network removed." \
     || print_warning "Docker network not found (already removed)."
+docker network prune -f 2>/dev/null || true
+print_status "Unused Docker networks pruned."
 
 print_section "Step 4/8: Removing systemd services"
 for svc in menshun-web.service menshun-monitor.service menshun-backup.service menshun-backup.timer menshun.target; do
