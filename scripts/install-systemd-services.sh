@@ -82,7 +82,6 @@ TimeoutStopSec=120
 # Security
 NoNewPrivileges=yes
 PrivateTmp=yes
-ProtectHome=yes
 ProtectSystem=strict
 ReadWritePaths=$APP_DIR $MENSHUN_DIR
 
@@ -116,7 +115,6 @@ RestartSec=60
 # Security
 NoNewPrivileges=yes
 PrivateTmp=yes
-ProtectHome=yes
 ProtectSystem=strict
 ReadOnlyPaths=$APP_DIR
 
