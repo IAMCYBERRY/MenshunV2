@@ -1,7 +1,7 @@
 # Menshun PAM - VM Deployment Makefile
 # Simple commands for production deployment and management
 
-.PHONY: help init deploy start stop restart status logs backup restore update clean quick-deploy deploy-stop deploy-logs deploy-status dev-start dev-stop
+.PHONY: help init deploy start stop restart status logs backup restore update clean purge quick-deploy deploy-stop deploy-logs deploy-status dev-start dev-stop
 
 # Default target
 help: ## Show this help message
@@ -21,7 +21,8 @@ help: ## Show this help message
 	@echo "  make backup   - Create full system backup"
 	@echo "  make restore  - Restore from backup"
 	@echo "  make update   - Update to latest version"
-	@echo "  make clean    - Clean up unused resources"
+	@echo "  make clean    - Clean up unused Docker resources"
+	@echo "  make purge    - ⚠️  COMPLETELY remove all data and services (fresh start)"
 	@echo ""
 	@echo "Development Commands:"
 	@echo "  make dev-start - Start in development mode"
@@ -175,12 +176,15 @@ update: ## Update to latest version
 	@$(MAKE) deploy
 	$(call print_status,"✅ Update completed!")
 
-clean: ## Clean up unused resources
+clean: ## Clean up unused Docker resources
 	$(call print_status,"🧹 Cleaning up unused resources...")
 	@$(COMPOSE_PROD) down --remove-orphans
 	@docker system prune -f
 	@docker volume prune -f
 	$(call print_status,"✅ Cleanup completed!")
+
+purge: ## ⚠️  COMPLETELY remove all containers, data, services, and config (enables fresh make init)
+	@./scripts/purge.sh
 
 # Quick deploy commands (one-touch deployment)
 quick-deploy: ## One-touch deploy (git clone && ./deploy.sh)
