@@ -63,13 +63,13 @@ Environment=COMPOSE_FILE=docker-compose.prod.yml
 Environment=COMPOSE_PROJECT_NAME=menshun
 
 # Start command
-ExecStart=/usr/local/bin/docker-compose -f docker-compose.prod.yml up -d
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
 
 # Stop command
-ExecStop=/usr/local/bin/docker-compose -f docker-compose.prod.yml down
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
 
 # Reload command
-ExecReload=/usr/local/bin/docker-compose -f docker-compose.prod.yml restart
+ExecReload=/usr/bin/docker compose -f docker-compose.prod.yml restart
 
 # Health check
 ExecStartPost=/bin/bash -c 'sleep 30 && curl -f http://localhost:8000/health/ || exit 1'
@@ -201,7 +201,7 @@ $MENSHUN_DIR/logs/*.log {
     create 644 $REAL_USER $REAL_USER
     postrotate
         # Send SIGUSR1 to Gunicorn to reopen log files
-        /usr/local/bin/docker-compose -f $APP_DIR/docker-compose.prod.yml kill -s USR1 web 2>/dev/null || true
+        /usr/bin/docker compose -f $APP_DIR/docker-compose.prod.yml kill -s USR1 web 2>/dev/null || true
     endscript
 }
 
