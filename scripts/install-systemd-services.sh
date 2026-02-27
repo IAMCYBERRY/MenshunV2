@@ -71,9 +71,6 @@ ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
 # Reload command
 ExecReload=/usr/bin/docker compose -f docker-compose.prod.yml restart
 
-# Health check
-ExecStartPost=/bin/bash -c 'sleep 30 && curl -f http://localhost:8000/health/ || exit 1'
-
 # Restart policy
 Restart=no
 TimeoutStartSec=300
