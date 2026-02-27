@@ -243,6 +243,11 @@ systemctl enable menshun-web.service
 systemctl enable menshun-monitor.service
 systemctl enable menshun-backup.timer
 
+# Reset any previous failed state and restart
+print_status "Resetting and starting menshun-web.service..."
+systemctl reset-failed menshun-web.service 2>/dev/null || true
+systemctl restart menshun-web.service || true
+
 print_status "✅ Systemd services installed and enabled successfully!"
 
 print_section "Service Management Commands"
