@@ -200,6 +200,9 @@ if [ $elapsed -ge $timeout ]; then
     warn "Check logs: docker compose -f docker-compose.deploy.yml logs web"
 fi
 
+# --- Initial admin account (idempotent — no-op if a superuser already exists) ---
+docker compose -f docker-compose.deploy.yml exec -T web python manage.py create_initial_admin
+
 # --- Done ---
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -214,8 +217,8 @@ if [ "$PUBLIC_HOST" != "localhost" ]; then
     echo -e "  ${YELLOW}TCP 80 and 443, or nothing above will be reachable from outside the VM.${NC}"
     echo ""
 fi
-echo -e "  Create a superuser:"
-echo -e "  ${YELLOW}docker compose -f docker-compose.deploy.yml exec web python manage.py createsuperuser${NC}"
+echo -e "  Log in with the admin credentials printed above (only shown once, on first deploy)."
+echo -e "  Use that account to create everyone else's login from the app itself."
 echo ""
 echo -e "  View logs:"
 echo -e "  ${YELLOW}docker compose -f docker-compose.deploy.yml logs -f${NC}"
