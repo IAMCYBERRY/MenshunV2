@@ -25,7 +25,7 @@ class VaultPermission(permissions.BasePermission):
             return False
 
         # Permission checks based on action
-        if view.action in ['list', 'retrieve']:
+        if view.action in ['list', 'retrieve', 'password', 'access_logs']:
             # All vault users can view
             return True
         elif view.action in ['create', 'update', 'partial_update']:
@@ -34,7 +34,7 @@ class VaultPermission(permissions.BasePermission):
         elif view.action == 'destroy':
             # Only Vault Admin can delete
             return Roles.ADMIN in user_groups
-        
+
         return False
     
     def has_object_permission(self, request, view, obj):

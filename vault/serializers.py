@@ -83,9 +83,6 @@ class VaultEntryDetailSerializer(serializers.ModelSerializer):
             'id', 'owner', 'last_accessed', 'access_count',
             'created_at', 'updated_at', 'created_by', 'updated_by'
         ]
-        extra_kwargs = {
-            'password': {'write_only': True}
-        }
     
     def create(self, validated_data):
         # Set owner to the current user

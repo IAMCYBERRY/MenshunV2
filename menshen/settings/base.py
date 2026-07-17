@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # Third party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'django_ratelimit',
     # Local apps
@@ -185,6 +186,17 @@ SIMPLE_JWT = {
 REDIS_HOST = config('REDIS_HOST', default='localhost')
 REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
 REDIS_DB = config('REDIS_DB', default=0, cast=int)
+
+# Cache (shared backend required by django_ratelimit)
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+    }
+}
 
 # Celery Configuration
 CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}'
