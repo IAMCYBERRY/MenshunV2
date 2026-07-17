@@ -79,8 +79,10 @@ init: ## Initialize VM for first-time Menshun deployment
 	$(call print_status,"✅ Menshun PAM initialization complete!")
 	@echo ""
 	@echo "$(GREEN)🎉 Menshun PAM is now running!$(NC)"
-	@echo "   Web Interface: https://$(shell hostname -I | cut -d' ' -f1)"
-	@echo "   Admin Panel:   https://$(shell hostname -I | cut -d' ' -f1)/admin"
+	@HOST=$$(grep '^ALLOWED_HOSTS=' .env 2>/dev/null | cut -d'=' -f2 | cut -d',' -f1); \
+	HOST=$${HOST:-$$(hostname -I | cut -d' ' -f1)}; \
+	echo "   Web Interface: https://$$HOST"; \
+	echo "   Admin Panel:   https://$$HOST/admin"
 	@echo ""
 	@echo "$(YELLOW)Next Steps:$(NC)"
 	@echo "1. Configure your domain name and SSL certificate"

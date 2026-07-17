@@ -38,30 +38,43 @@ generate_fernet_key() {
 }
 
 # Get server IP
+# On cloud VMs (Azure, AWS, GCP) the public IP is NAT'd and never visible to
+# local interfaces — hostname -I only ever returns the private IP. Using the
+# private IP here would make ALLOWED_HOSTS and the SSL cert match an address
+# nobody actually connects through, so try cloud metadata / a public-IP
+# lookup first and only fall back to local-interface detection.
 get_server_ip() {
-    # Try different methods to get the server IP
     local ip=""
-    
-    # Method 1: hostname -I (most reliable on Linux)
-    if command -v hostname >/dev/null 2>&1; then
+
+    # Azure Instance Metadata Service — instant, no internet egress needed
+    ip=$(curl -s -m 2 -H "Metadata:true" \
+        "http://169.254.169.254/metadata/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?api-version=2021-02-01&format=text" 2>/dev/null || true)
+
+    # Generic public-IP lookup (works on any host with outbound internet)
+    if [ -z "$ip" ]; then
+        ip=$(curl -s -m 3 https://api.ipify.org 2>/dev/null || true)
+    fi
+
+    # Method 1: hostname -I (private/local IP — on-prem VMs, local testing)
+    if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1; then
         ip=$(hostname -I 2>/dev/null | cut -d' ' -f1)
     fi
-    
+
     # Method 2: ip route (if hostname -I fails)
     if [ -z "$ip" ] && command -v ip >/dev/null 2>&1; then
         ip=$(ip route get 8.8.8.8 2>/dev/null | awk 'NR==1 {print $7}')
     fi
-    
+
     # Method 3: ifconfig (fallback)
     if [ -z "$ip" ] && command -v ifconfig >/dev/null 2>&1; then
         ip=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1)
     fi
-    
+
     # Default fallback
     if [ -z "$ip" ]; then
         ip="localhost"
     fi
-    
+
     echo "$ip"
 }
 

@@ -8,7 +8,6 @@ This guide covers production deployment of Menshun PAM on virtual machines with 
 ```bash
 git clone <repository-url>
 cd MenshunV2
-git checkout dev/vm-optimization
 ```
 
 ### 2. Initialize VM (One Command!)
@@ -31,6 +30,35 @@ This single command will:
 # Your Menshun PAM will be available at:
 https://your-server-ip/
 ```
+
+## Deploying on an Azure VM
+
+Both deployment paths (`./deploy.sh` and `make init`) work unchanged on an Azure VM — they
+auto-detect the VM's public IP via the Azure Instance Metadata Service and use it for
+`ALLOWED_HOSTS` and the SSL certificate. Two things only Azure itself controls:
+
+1. **Network Security Group** — no script inside the VM can open this. In the Azure Portal
+   (or `az network nsg rule create`), allow inbound TCP on:
+   - `22` (SSH, to reach the VM at all)
+   - `80` and `443` (HTTP/HTTPS — the app itself)
+
+   Without this, the app will start and pass its own health check, but nothing outside
+   the VM will be able to reach it.
+
+2. **Static Public IP recommended** — by default Azure VMs get a *dynamic* public IP that
+   changes on stop/deallocate. Both deploy scripts re-detect the IP and self-heal
+   `ALLOWED_HOSTS` (and regenerate the SSL cert) on the next run, but a Static Public IP
+   avoids the churn — and the repeated self-signed cert / browser re-trust prompts — entirely.
+   Set it under the VM's Networking blade (or `az network public-ip update --allocation-method Static`).
+
+If the VM's NSG restricts outbound traffic (so it can't reach the Azure Instance Metadata
+Service or an external IP-lookup service), override auto-detection explicitly:
+```bash
+PUBLIC_HOST=<vm-public-ip-or-domain> ./deploy.sh
+```
+
+Recommended image: Ubuntu Server 22.04 LTS or 24.04 LTS, size `Standard_B2s` or larger
+(2 vCPU / 4GB RAM minimum for Postgres + Redis + Django + nginx together).
 
 ## Available Commands
 
