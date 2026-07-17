@@ -33,7 +33,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         if response.status_code == 200:
             # Add user info to the response
             try:
-                user = CustomUser.objects.get(username=username)
+                user = CustomUser.objects.get(username__iexact=username)
                 response.data['user'] = {
                     'id': user.id,
                     'username': user.username,

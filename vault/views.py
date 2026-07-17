@@ -720,7 +720,7 @@ def create_user(request):
                 }, status=400)
         
         # Check if username already exists
-        if CustomUser.objects.filter(username=data['username']).exists():
+        if CustomUser.objects.filter(username__iexact=data['username']).exists():
             return JsonResponse({
                 'success': False,
                 'error': 'Username already exists.'

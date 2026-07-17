@@ -1,9 +1,18 @@
-from django.contrib.auth.models import AbstractUser, Group
+from django.contrib.auth.models import AbstractUser, Group, UserManager
 from django.db import models
 from django.utils import timezone
 import json
 
 from .fields import EncryptedCharField
+
+
+class CustomUserManager(UserManager):
+    def get_by_natural_key(self, username):
+        # Case-insensitive so "Admin" and "admin" log in as the same account.
+        # This also makes UserCreationForm.clean_username() (Django admin's
+        # "add user" page) reject case-variant duplicates, since it calls
+        # this same method to check for an existing user.
+        return self.get(**{f'{self.model.USERNAME_FIELD}__iexact': username})
 
 
 class CustomUser(AbstractUser):
@@ -16,6 +25,16 @@ class CustomUser(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    objects = CustomUserManager()
+
+    def save(self, *args, **kwargs):
+        # Normalize to lowercase so the DB's unique constraint on username
+        # actually enforces case-insensitive uniqueness — "Admin" and "admin"
+        # can never both exist, regardless of which code path creates the user.
+        if self.username:
+            self.username = self.username.lower()
+        super().save(*args, **kwargs)
 
     def soft_delete(self):
         """Soft delete the user"""
