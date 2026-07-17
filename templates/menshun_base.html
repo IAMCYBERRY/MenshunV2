@@ -739,10 +739,13 @@
                 {% endif %}
                 
                 <div style="margin-top: var(--space-sm);">
-                    <a href="{% url 'admin:logout' %}" class="btn btn-secondary" style="font-size: 12px; padding: 8px 16px;">
-                        <i class="ph ph-sign-out"></i>
-                        Logout
-                    </a>
+                    <form method="post" action="{% url 'admin:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-secondary" style="font-size: 12px; padding: 8px 16px;">
+                            <i class="ph ph-sign-out"></i>
+                            Logout
+                        </button>
+                    </form>
                 </div>
             </div>
             {% endif %}

@@ -82,10 +82,13 @@
                         </div>
                         
                         <div class="px-3">
-                            <a href="{% url 'admin:logout' %}" class="btn btn-outline-danger btn-sm">
-                                <i class="bi bi-box-arrow-right me-1"></i>
-                                Logout
-                            </a>
+                            <form method="post" action="{% url 'admin:logout' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-box-arrow-right me-1"></i>
+                                    Logout
+                                </button>
+                            </form>
                         </div>
                     {% endif %}
                 </div>
