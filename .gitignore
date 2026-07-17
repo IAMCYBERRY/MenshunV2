@@ -229,6 +229,7 @@ logs/
 *.crt
 *.p12
 *.pfx
+config/nginx/ssl/
 
 # API keys and secrets (if stored in files)
 api_keys.json

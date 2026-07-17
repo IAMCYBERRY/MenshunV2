@@ -69,7 +69,7 @@ fi
 
 # Stop web application to prevent connections during restore
 print_status "Stopping web application..."
-docker-compose -f $COMPOSE_FILE stop web celery celery-beat
+docker-compose -f $COMPOSE_FILE stop web celery
 
 # Create a backup of current database before restore
 CURRENT_BACKUP="/tmp/pre-restore-backup-$(date +%Y%m%d-%H%M%S).sql.gz"
